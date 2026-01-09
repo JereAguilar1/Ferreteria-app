@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16
+    container_name: ferreteria-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ferreteria}
+      POSTGRES_USER: ${DB_USER:-ferreteria}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ferreteria}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ferreteria} -d ${DB_NAME:-ferreteria}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ferreteria-network
+
+  # Flask Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ferreteria-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-ferreteria}
+      - DB_USER=${DB_USER:-ferreteria}
+      - DB_PASSWORD=${DB_PASSWORD:-ferreteria}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ferreteria-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  ferreteria-network:
+    driver: bridge
+

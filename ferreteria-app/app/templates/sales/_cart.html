@@ -1,0 +1,91 @@
+<!-- Cart Partial (HTMX target) -->
+<div id="cart-container">
+    {% if cart_items %}
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Producto</th>
+                    <th class="text-center">UOM</th>
+                    <th class="text-end">Precio Unit.</th>
+                    <th class="text-center" style="width: 120px;">Cantidad</th>
+                    <th class="text-end">Subtotal</th>
+                    <th class="text-center" style="width: 60px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in cart_items %}
+                <tr>
+                    <td>
+                        <strong>{{ item.product.name }}</strong>
+                        <br><small class="text-muted">SKU: {{ item.product.sku or '-' }}</small>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge bg-info">{{ item.product.uom.symbol }}</span>
+                    </td>
+                    <td class="text-end">${{ "%.2f"|format(item.unit_price) }}</td>
+                    <td>
+                        <form hx-post="{{ url_for('sales.cart_update') }}"
+                              hx-target="#cart-container"
+                              hx-swap="outerHTML"
+                              class="d-flex align-items-center">
+                            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+                            <input type="number" 
+                                   name="qty" 
+                                   value="{{ item.qty }}"
+                                   min="0.01"
+                                   step="0.01"
+                                   max="{{ item.product.on_hand_qty }}"
+                                   class="form-control form-control-sm"
+                                   style="width: 80px;"
+                                   hx-trigger="change">
+                        </form>
+                    </td>
+                    <td class="text-end">
+                        <strong>${{ "%.2f"|format(item.subtotal) }}</strong>
+                    </td>
+                    <td class="text-center">
+                        <form hx-post="{{ url_for('sales.cart_remove') }}"
+                              hx-target="#cart-container"
+                              hx-swap="outerHTML"
+                              style="display: inline;">
+                            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+                            <button type="submit" 
+                                    class="btn btn-sm btn-outline-danger"
+                                    title="Eliminar">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="table-active">
+                    <td colspan="4" class="text-end"><strong>TOTAL:</strong></td>
+                    <td class="text-end">
+                        <h5 class="mb-0">${{ "%.2f"|format(cart_total) }}</h5>
+                    </td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    
+    <div class="d-grid gap-2">
+        <form method="POST" action="{{ url_for('sales.confirm') }}" 
+              onsubmit="return confirm('Confirmar venta?');">
+            <button type="submit" class="btn btn-success btn-lg w-100">
+                <i class="bi bi-check-circle"></i> Confirmar Venta (${{ "%.2f"|format(cart_total) }})
+            </button>
+        </form>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center">
+        <i class="bi bi-cart-x"></i>
+        <p class="mb-0">El carrito está vacío</p>
+        <small>Busque y agregue productos para crear una venta</small>
+    </div>
+    {% endif %}
+</div>
+

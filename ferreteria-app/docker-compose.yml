@@ -40,6 +40,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-ferreteria}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - APP_PASSWORD=${APP_PASSWORD}
+      - SESSION_AUTH_KEY=${SESSION_AUTH_KEY:-authenticated}
     depends_on:
       db:
         condition: service_healthy

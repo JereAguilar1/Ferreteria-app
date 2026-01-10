@@ -13,6 +13,10 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     DEBUG = os.getenv('FLASK_DEBUG', '1') == '1'
     
+    # Authentication (MEJORA 8 - Password Protection)
+    APP_PASSWORD = os.getenv('APP_PASSWORD')
+    SESSION_AUTH_KEY = os.getenv('SESSION_AUTH_KEY', 'authenticated')
+    
     # Database - Support multiple environment variable naming conventions
     # Priority: DATABASE_URL > DB_* > POSTGRES_*
     DATABASE_URL = os.getenv('DATABASE_URL')

@@ -2,6 +2,9 @@
 
 Sistema web completo para gestión de ferretería con control de stock, ventas, compras y balance financiero.
 
+> **⚠️ IMPORTANTE - Protección por Contraseña (MEJORA 8)**  
+> Esta aplicación requiere una contraseña única para acceder. Debes configurar `APP_PASSWORD` en el archivo `.env` antes de iniciar la aplicación. Sin esta variable configurada, la aplicación bloqueará el acceso por seguridad.
+
 ## Stack Técnico
 
 - **Backend**: Python 3.13+
@@ -53,6 +56,9 @@ FLASK_APP=app.py
 FLASK_ENV=development
 FLASK_DEBUG=1
 SECRET_KEY=dev-secret-key-change-in-production
+
+# Authentication (REQUIRED)
+APP_PASSWORD=your-secure-password-here
 ```
 
 ### 4. Iniciar la base de datos PostgreSQL

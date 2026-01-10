@@ -122,11 +122,11 @@ def new_product():
     session = get_session()
     
     try:
-        # Check if UOM table has data
+        # MEJORA 9: Check if UOM table has data
         uom_count = session.query(UOM).count()
         if uom_count == 0:
-            flash('No hay unidades de medida cargadas. Por favor, ejecute el script de seed primero.', 'warning')
-            return redirect(url_for('catalog.list_products'))
+            flash('No hay unidades de medida registradas. Debe crear al menos una unidad de medida antes de poder crear productos.', 'warning')
+            return redirect(url_for('settings.list_uoms'))
         
         uoms = session.query(UOM).order_by(UOM.name).all()
         categories = session.query(Category).order_by(Category.name).all()

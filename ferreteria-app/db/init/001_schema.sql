@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS product (
   uom_id      BIGINT NOT NULL REFERENCES uom(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   active      BOOLEAN NOT NULL DEFAULT TRUE,
   sale_price  NUMERIC(12,2) NOT NULL CHECK (sale_price >= 0),
+  image_path  VARCHAR(255),  -- MEJORA 1: Ruta de imagen del producto
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

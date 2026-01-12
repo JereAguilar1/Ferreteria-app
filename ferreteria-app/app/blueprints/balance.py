@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal
 import decimal
 from app.database import get_session
-from app.models import FinanceLedger, LedgerType, LedgerReferenceType
+from app.models import FinanceLedger, LedgerType, LedgerReferenceType, PaymentMethod  # MEJORA 12
 from app.services.balance_service import (
     get_balance_series, get_default_date_range, get_totals,
     get_available_years, get_available_months, get_month_date_range,
@@ -29,9 +29,17 @@ def index():
         year_str = request.args.get('year', '').strip()
         month_str = request.args.get('month', '').strip()
         
+        # MEJORA 12: Get payment method filter
+        method = request.args.get('method', 'all').lower().strip()
+        
         # Validate view
         if view not in ['daily', 'monthly', 'yearly']:
             view = 'monthly'
+        
+        # Validate method
+        if method not in ['all', 'cash', 'transfer']:
+            flash('Método de pago inválido. Mostrando todos.', 'info')
+            method = 'all'
         
         # Get available years for filters
         available_years = get_available_years(db_session)
@@ -185,8 +193,8 @@ def index():
             else:
                 start, end = get_default_date_range(view)
         
-        # Get balance series
-        series = get_balance_series(view, start, end, db_session)
+        # Get balance series with payment method filter (MEJORA 12)
+        series = get_balance_series(view, start, end, db_session, method=method)
         
         # Calculate totals
         totals = get_totals(series)
@@ -205,7 +213,8 @@ def index():
             available_years=available_years,
             selected_year=selected_year,
             selected_month=selected_month,
-            available_months=available_months
+            available_months=available_months,
+            selected_method=method  # MEJORA 12
         )
         
     except Exception as e:
@@ -237,6 +246,12 @@ def list_ledger():
         entry_type = request.args.get('type', '').upper()  # INCOME, EXPENSE
         start_str = request.args.get('start', '').strip()
         end_str = request.args.get('end', '').strip()
+        method = request.args.get('method', 'all').lower().strip()  # MEJORA 12
+        
+        # Validate method
+        if method not in ['all', 'cash', 'transfer']:
+            flash('Método de pago inválido. Mostrando todos.', 'info')
+            method = 'all'
         
         # Build query
         query = db_session.query(FinanceLedger)
@@ -244,6 +259,13 @@ def list_ledger():
         # Filter by type
         if entry_type and entry_type in ['INCOME', 'EXPENSE']:
             query = query.filter(FinanceLedger.type == LedgerType[entry_type])
+        
+        # MEJORA 12: Filter by payment method
+        if method == 'cash':
+            query = query.filter(FinanceLedger.payment_method == 'CASH')
+        elif method == 'transfer':
+            query = query.filter(FinanceLedger.payment_method == 'TRANSFER')
+        # if 'all', no filter applied
         
         # Filter by date range
         if start_str:
@@ -268,6 +290,7 @@ def list_ledger():
             'balance/ledger_list.html',
             entries=entries,
             entry_type=entry_type,
+            selected_method=method,  # MEJORA 12
             start=start_str,
             end=end_str
         )
@@ -297,10 +320,16 @@ def create_ledger():
         datetime_str = request.form.get('datetime', '').strip()
         category = request.form.get('category', '').strip() or None
         notes = request.form.get('notes', '').strip() or None
+        payment_method = request.form.get('payment_method', 'CASH').upper()  # MEJORA 12
         
         # Validations
         if entry_type not in ['INCOME', 'EXPENSE']:
             flash('Tipo de movimiento inválido', 'danger')
+            return redirect(url_for('balance.new_ledger'))
+        
+        # MEJORA 12: Validate payment method
+        if payment_method not in ['CASH', 'TRANSFER']:
+            flash('Método de pago inválido', 'danger')
             return redirect(url_for('balance.new_ledger'))
         
         if not amount_str:
@@ -326,7 +355,11 @@ def create_ledger():
         else:
             entry_datetime = datetime.now()
         
-        # Create ledger entry
+        # Create ledger entry with payment_method (MEJORA 12)
+        # FIX: Normalize payment_method to ensure it's a valid string
+        from app.models import normalize_payment_method
+        payment_method_normalized = normalize_payment_method(payment_method)
+        
         ledger = FinanceLedger(
             datetime=entry_datetime,
             type=LedgerType[entry_type],
@@ -334,13 +367,15 @@ def create_ledger():
             reference_type=LedgerReferenceType.MANUAL,
             reference_id=None,  # Manual entries don't have reference_id
             category=category,
-            notes=notes
+            notes=notes,
+            payment_method=payment_method_normalized  # MEJORA 12 FIX
         )
         
         db_session.add(ledger)
         db_session.commit()
         
-        flash(f'Movimiento manual de tipo {entry_type} por ${amount} registrado exitosamente', 'success')
+        payment_label = 'Efectivo' if payment_method == 'CASH' else 'Transferencia'
+        flash(f'Movimiento manual de tipo {entry_type} por ${amount} ({payment_label}) registrado exitosamente', 'success')
         return redirect(url_for('balance.list_ledger'))
         
     except Exception as e:

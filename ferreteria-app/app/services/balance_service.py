@@ -5,7 +5,7 @@ from sqlalchemy import func, case, extract
 from app.models import FinanceLedger, LedgerType
 
 
-def get_balance_series(view: str, start: date, end: date, session):
+def get_balance_series(view: str, start: date, end: date, session, method: str = 'all'):
     """
     Get balance series (income, expense, net) grouped by period.
     
@@ -14,6 +14,7 @@ def get_balance_series(view: str, start: date, end: date, session):
         start: Start date (inclusive)
         end: End date (inclusive)
         session: SQLAlchemy session
+        method: 'all', 'cash', or 'transfer' (MEJORA 12) - filter by payment method
         
     Returns:
         List of dicts with keys:
@@ -63,9 +64,16 @@ def get_balance_series(view: str, start: date, end: date, session):
         )
         .filter(FinanceLedger.datetime >= start_dt)
         .filter(FinanceLedger.datetime <= end_dt)
-        .group_by(period_col)
-        .order_by(period_col.asc())
     )
+    
+    # MEJORA 12: Apply payment method filter
+    if method == 'cash':
+        query = query.filter(FinanceLedger.payment_method == 'CASH')
+    elif method == 'transfer':
+        query = query.filter(FinanceLedger.payment_method == 'TRANSFER')
+    # if 'all', no filter applied
+    
+    query = query.group_by(period_col).order_by(period_col.asc())
     
     results = query.all()
     

@@ -23,7 +23,7 @@
 <div class="card mb-3">
     <div class="card-body">
         <form method="GET" action="{{ url_for('balance.list_ledger') }}" class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="type" class="form-label">Tipo</label>
                 <select class="form-select" id="type" name="type">
                     <option value="">Todos</option>
@@ -32,12 +32,22 @@
                 </select>
             </div>
             
+            <!-- MEJORA 12: Payment Method Filter -->
+            <div class="col-md-2">
+                <label for="method" class="form-label">Método</label>
+                <select class="form-select" id="method" name="method">
+                    <option value="all" {% if selected_method == 'all' %}selected{% endif %}>Todos</option>
+                    <option value="cash" {% if selected_method == 'cash' %}selected{% endif %}>Efectivo</option>
+                    <option value="transfer" {% if selected_method == 'transfer' %}selected{% endif %}>Transferencia</option>
+                </select>
+            </div>
+            
             <div class="col-md-3">
                 <label for="start" class="form-label">Fecha Desde</label>
                 <input type="date" class="form-control" id="start" name="start" value="{{ start }}">
             </div>
             
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="end" class="form-label">Fecha Hasta</label>
                 <input type="date" class="form-control" id="end" name="end" value="{{ end }}">
             </div>
@@ -68,6 +78,7 @@
                         <th>ID</th>
                         <th>Fecha/Hora</th>
                         <th>Tipo</th>
+                        <th>Método</th>
                         <th class="text-end">Monto</th>
                         <th>Origen</th>
                         <th>Ref ID</th>
@@ -85,6 +96,13 @@
                             <span class="badge bg-success">INGRESO</span>
                             {% else %}
                             <span class="badge bg-danger">EGRESO</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if entry.payment_method == 'CASH' %}
+                            <span class="badge bg-light text-dark"><i class="bi bi-cash"></i> Efectivo</span>
+                            {% else %}
+                            <span class="badge bg-primary"><i class="bi bi-bank"></i> Transferencia</span>
                             {% endif %}
                         </td>
                         <td class="text-end {% if entry.type.value == 'INCOME' %}text-success{% else %}text-danger{% endif %}">

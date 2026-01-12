@@ -16,12 +16,12 @@
     <div class="col-12">
         <form method="GET" action="{{ url_for('catalog.list_products') }}" class="row g-2 align-items-end">
             <!-- Category Filter -->
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="category_id" class="form-label small mb-1">
                     <i class="bi bi-funnel"></i> Categoría
                 </label>
                 <select class="form-select" id="category_id" name="category_id">
-                    <option value="">Todas las categorías</option>
+                    <option value="">Todas</option>
                     {% for category in categories %}
                     <option value="{{ category.id }}" 
                             {% if selected_category_id|string == category.id|string %}selected{% endif %}>
@@ -31,8 +31,24 @@
                 </select>
             </div>
             
+            <!-- Stock Filter (MEJORA 11) -->
+            <div class="col-md-2">
+                <label for="stock_filter" class="form-label small mb-1">
+                    <i class="bi bi-box"></i> Stock
+                </label>
+                <select class="form-select" id="stock_filter" name="stock_filter">
+                    <option value="">Todos</option>
+                    <option value="out" {% if selected_stock_filter == 'out' %}selected{% endif %}>
+                        Sin stock
+                    </option>
+                    <option value="low" {% if selected_stock_filter == 'low' %}selected{% endif %}>
+                        Poco stock (≤ mínimo)
+                    </option>
+                </select>
+            </div>
+            
             <!-- Search Input -->
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label for="search_q" class="form-label small mb-1">
                     <i class="bi bi-search"></i> Buscar
                 </label>
@@ -47,9 +63,9 @@
             <!-- Action Buttons -->
             <div class="col-md-4 text-end">
                 <button class="btn btn-primary" type="submit">
-                    <i class="bi bi-funnel-fill"></i> Aplicar Filtros
+                    <i class="bi bi-funnel-fill"></i> Aplicar
                 </button>
-                {% if search_query or selected_category_id %}
+                {% if search_query or selected_category_id or selected_stock_filter %}
                 <a href="{{ url_for('catalog.list_products') }}" class="btn btn-secondary">
                     <i class="bi bi-x-circle"></i> Limpiar
                 </a>
@@ -63,7 +79,7 @@
 </div>
 
 <!-- Active Filters Info -->
-{% if search_query or selected_category_id %}
+{% if search_query or selected_category_id or selected_stock_filter %}
 <div class="row mb-2">
     <div class="col-12">
         <div class="alert alert-info alert-dismissible fade show py-2" role="alert">
@@ -75,6 +91,14 @@
                     {% for cat in categories %}
                         {% if cat.id|string == selected_category_id|string %}{{ cat.name }}{% endif %}
                     {% endfor %}
+                </span>
+                {% endif %}
+                {% if selected_stock_filter %}
+                <span class="badge bg-warning text-dark">
+                    Stock: 
+                    {% if selected_stock_filter == 'out' %}Sin stock
+                    {% elif selected_stock_filter == 'low' %}Poco stock (≤ mínimo)
+                    {% endif %}
                 </span>
                 {% endif %}
                 {% if search_query %}
@@ -105,6 +129,7 @@
                         <th>Unidad</th>
                         <th class="text-end">Precio Venta</th>
                         <th class="text-center">Stock</th>
+                        <th class="text-center">Stock Mín.</th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
@@ -143,10 +168,17 @@
                         <td class="text-center">
                             {% if product.on_hand_qty == 0 %}
                             <span class="badge bg-danger">0</span>
-                            {% elif product.on_hand_qty < 10 %}
+                            {% elif product.min_stock_qty > 0 and product.on_hand_qty <= product.min_stock_qty %}
                             <span class="badge bg-warning text-dark">{{ "%.2f"|format(product.on_hand_qty) }}</span>
                             {% else %}
                             <span class="badge bg-success">{{ "%.2f"|format(product.on_hand_qty) }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if product.min_stock_qty > 0 %}
+                            {{ "%.2f"|format(product.min_stock_qty) }}
+                            {% else %}
+                            <span class="text-muted">—</span>
                             {% endif %}
                         </td>
                         <td class="text-center">

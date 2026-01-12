@@ -1,5 +1,5 @@
 """Invoices blueprint for purchase invoice management."""
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from decimal import Decimal
 from datetime import datetime, date
 from app.database import get_session
@@ -97,6 +97,11 @@ def view_invoice(invoice_id):
         return render_template('invoices/detail.html', invoice=invoice, today=today)
         
     except Exception as e:
+        # Log the full traceback for debugging
+        import traceback
+        current_app.logger.error(f"Error loading invoice {invoice_id}: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        
         flash(f'Error al cargar boleta: {str(e)}', 'danger')
         return redirect(url_for('invoices.list_invoices'))
 
@@ -311,6 +316,32 @@ def create_invoice():
         return redirect(url_for('invoices.new_invoice'))
 
 
+@invoices_bp.route('/<int:invoice_id>/pay/preview', methods=['GET'])
+def pay_invoice_preview(invoice_id):
+    """Preview invoice payment details before confirmation (MEJORA 19 - Modal)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            return '<div class="alert alert-danger">Boleta no encontrada.</div>'
+        
+        if invoice.status != InvoiceStatus.PENDING:
+            return f'<div class="alert alert-danger">Solo se pueden pagar boletas PENDING. Estado actual: {invoice.status.value}</div>'
+        
+        # Pass today's date for default
+        today = date.today().strftime('%Y-%m-%d')
+        
+        return render_template('invoices/_pay_confirm_modal.html',
+                             invoice=invoice,
+                             today=today)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating payment preview for invoice {invoice_id}: {e}")
+        return f'<div class="alert alert-danger">Error al generar vista previa: {str(e)}</div>'
+
+
 @invoices_bp.route('/<int:invoice_id>/pay', methods=['POST'])
 def pay_invoice_route(invoice_id):
     """Mark invoice as PAID and register EXPENSE in finance_ledger."""
@@ -319,9 +350,15 @@ def pay_invoice_route(invoice_id):
     try:
         # Get paid_at from form
         paid_at_str = request.form.get('paid_at', '').strip()
+        payment_method = request.form.get('payment_method', 'CASH').upper()  # MEJORA 12
         
         if not paid_at_str:
             flash('La fecha de pago es requerida', 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # MEJORA 12: Validate payment method
+        if payment_method not in ['CASH', 'TRANSFER']:
+            flash('Método de pago inválido.', 'danger')
             return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
         
         # Parse date
@@ -331,10 +368,11 @@ def pay_invoice_route(invoice_id):
             flash('Formato de fecha inválido', 'danger')
             return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
         
-        # Call payment service
-        pay_invoice(invoice_id, paid_at, db_session)
+        # Call payment service with payment_method (MEJORA 12)
+        pay_invoice(invoice_id, paid_at, db_session, payment_method)
         
-        flash(f'Boleta #{invoice_id} marcada como pagada exitosamente. Egreso registrado en el libro mayor.', 'success')
+        payment_label = 'Efectivo' if payment_method == 'CASH' else 'Transferencia'
+        flash(f'Boleta #{invoice_id} marcada como pagada ({payment_label}). Egreso registrado en el libro mayor.', 'success')
         return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
         
     except ValueError as e:

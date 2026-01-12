@@ -71,41 +71,35 @@
 <div class="row">
     <div class="col-12">
         {% if invoice.status.value == 'PENDING' %}
-        <!-- Payment Form for PENDING invoices -->
+        <!-- Payment Button for PENDING invoices (MEJORA 19: Opens modal) -->
         <div class="card border-warning mb-3">
             <div class="card-header bg-warning text-dark">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-credit-card"></i> Registrar Pago
                 </h5>
             </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('invoices.pay_invoice_route', invoice_id=invoice.id) }}" 
-                      onsubmit="return confirm('¿Confirmar pago de esta boleta?\n\nSe registrará un EGRESO de ${{ \"%.2f\"|format(invoice.total_amount) }} en el libro mayor.');">
-                    <div class="row align-items-end">
-                        <div class="col-md-4">
-                            <label for="paid_at" class="form-label">
-                                Fecha de Pago <span class="text-danger">*</span>
-                            </label>
-                            <input type="date" 
-                                   class="form-control" 
-                                   id="paid_at" 
-                                   name="paid_at" 
-                                   value="{{ today }}"
-                                   max="{{ today }}"
-                                   required>
-                            <div class="form-text">Fecha en que se realizó el pago</div>
-                        </div>
-                        <div class="col-md-8">
-                            <button type="submit" class="btn btn-success btn-lg">
-                                <i class="bi bi-check-circle"></i> Marcar como Pagada
-                            </button>
-                            <small class="d-block mt-2 text-muted">
-                                <i class="bi bi-info-circle"></i>
-                                Se registrará un egreso de <strong>${{ "%.2f"|format(invoice.total_amount) }}</strong> en el libro mayor financiero.
-                            </small>
-                        </div>
+            <div class="card-body text-center">
+                <p class="mb-3">
+                    <i class="bi bi-info-circle text-muted"></i>
+                    Total a pagar: <strong class="text-danger fs-4">${{ '%.2f'|format(invoice.total_amount) }}</strong>
+                </p>
+                <button type="button" 
+                        class="btn btn-success btn-lg"
+                        hx-get="{{ url_for('invoices.pay_invoice_preview', invoice_id=invoice.id) }}"
+                        hx-target="#invoice-modal-container"
+                        hx-swap="innerHTML"
+                        hx-indicator="#pay-loading">
+                    <i class="bi bi-check-circle"></i> Pagar Boleta
+                </button>
+                <div id="pay-loading" class="htmx-indicator mt-2">
+                    <div class="spinner-border text-success" role="status">
+                        <span class="visually-hidden">Cargando...</span>
                     </div>
-                </form>
+                </div>
+                <small class="d-block mt-3 text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    Se abrirá una ventana de confirmación con el detalle completo
+                </small>
             </div>
         </div>
         {% else %}
@@ -175,5 +169,10 @@
         </div>
     </div>
 </div>
+
+<!-- MEJORA 19: Modal Container -->
+<div id="invoice-modal-container"></div>
+
 {% endblock %}
+
 

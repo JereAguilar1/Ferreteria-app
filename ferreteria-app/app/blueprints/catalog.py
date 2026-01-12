@@ -64,6 +64,7 @@ def list_products():
         # Get search and filter parameters
         search_query = request.args.get('q', '').strip()
         category_id = request.args.get('category_id', '').strip()
+        stock_filter = request.args.get('stock_filter', '').strip()  # MEJORA 10
         
         # Get all categories for the filter dropdown
         categories = session.query(Category).order_by(Category.name).all()
@@ -97,6 +98,25 @@ def list_products():
             )
             query = query.filter(search_filter)
         
+        # MEJORA 11: Apply stock filter if provided (using per-product min_stock_qty)
+        if stock_filter:
+            if stock_filter == 'out':
+                # Out of stock: stock <= 0 (including NULL treated as 0)
+                query = query.filter(
+                    func.coalesce(ProductStock.on_hand_qty, 0) <= 0
+                )
+            elif stock_filter == 'low':
+                # Low stock: 0 < stock <= min_stock_qty (only if min_stock_qty > 0)
+                query = query.filter(
+                    func.coalesce(ProductStock.on_hand_qty, 0) > 0,
+                    func.coalesce(Product.min_stock_qty, 0) > 0,
+                    func.coalesce(ProductStock.on_hand_qty, 0) <= func.coalesce(Product.min_stock_qty, 0)
+                )
+            elif stock_filter not in ['', 'out', 'low']:
+                # Invalid stock_filter, reset to all
+                flash('Filtro de stock inválido. Mostrando todos los productos.', 'info')
+                stock_filter = ''
+        
         # Order by name
         products = query.order_by(Product.name).all()
         
@@ -104,7 +124,8 @@ def list_products():
                              products=products, 
                              search_query=search_query,
                              categories=categories,
-                             selected_category_id=category_id)
+                             selected_category_id=category_id,
+                             selected_stock_filter=stock_filter)
         
     except Exception as e:
         flash(f'Error al cargar productos: {str(e)}', 'danger')
@@ -155,6 +176,7 @@ def create_product():
         category_id = request.form.get('category_id', '').strip() or None
         uom_id = request.form.get('uom_id', '').strip()
         sale_price = request.form.get('sale_price', '0').strip()
+        min_stock_qty = request.form.get('min_stock_qty', '0').strip()  # MEJORA 11
         active = request.form.get('active') == 'on'
         
         # Server-side validations
@@ -177,6 +199,15 @@ def create_product():
                 errors.append('El precio de venta debe ser mayor o igual a 0')
         except ValueError:
             errors.append('El precio de venta debe ser un número válido')
+        
+        # MEJORA 11: Validate min_stock_qty
+        try:
+            min_stock_qty_decimal = float(min_stock_qty) if min_stock_qty else 0
+            if min_stock_qty_decimal < 0:
+                errors.append('El stock mínimo debe ser mayor o igual a 0')
+        except ValueError:
+            errors.append('El stock mínimo debe ser un número válido')
+            min_stock_qty_decimal = 0
         
         if errors:
             for error in errors:
@@ -204,7 +235,8 @@ def create_product():
             uom_id=int(uom_id),
             sale_price=sale_price_decimal,
             active=active,
-            image_path=image_filename
+            image_path=image_filename,
+            min_stock_qty=min_stock_qty_decimal  # MEJORA 11
         )
         
         session.add(product)
@@ -288,6 +320,7 @@ def update_product(product_id):
         category_id = request.form.get('category_id', '').strip() or None
         uom_id = request.form.get('uom_id', '').strip()
         sale_price = request.form.get('sale_price', '0').strip()
+        min_stock_qty = request.form.get('min_stock_qty', '0').strip()  # MEJORA 11
         active = request.form.get('active') == 'on'
         
         # Server-side validations
@@ -309,6 +342,15 @@ def update_product(product_id):
                 errors.append('El precio de venta debe ser mayor o igual a 0')
         except ValueError:
             errors.append('El precio de venta debe ser un número válido')
+        
+        # MEJORA 11: Validate min_stock_qty
+        try:
+            min_stock_qty_decimal = float(min_stock_qty) if min_stock_qty else 0
+            if min_stock_qty_decimal < 0:
+                errors.append('El stock mínimo debe ser mayor o igual a 0')
+        except ValueError:
+            errors.append('El stock mínimo debe ser un número válido')
+            min_stock_qty_decimal = 0
         
         if errors:
             for error in errors:
@@ -346,6 +388,7 @@ def update_product(product_id):
         product.category_id = int(category_id) if category_id else None
         product.uom_id = int(uom_id)
         product.sale_price = sale_price_decimal
+        product.min_stock_qty = min_stock_qty_decimal  # MEJORA 11
         product.active = active
         
         session.commit()

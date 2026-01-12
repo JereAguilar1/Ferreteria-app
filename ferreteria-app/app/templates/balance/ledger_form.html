@@ -39,6 +39,24 @@
                         </div>
                     </div>
 
+                    <!-- MEJORA 12: Payment Method -->
+                    <div class="mb-3">
+                        <label for="payment_method" class="form-label">
+                            Método de Pago/Cobro <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="payment_method" name="payment_method" required>
+                            <option value="CASH" selected>
+                                <i class="bi bi-cash"></i> Efectivo
+                            </option>
+                            <option value="TRANSFER">
+                                <i class="bi bi-bank"></i> Transferencia
+                            </option>
+                        </select>
+                        <div class="form-text">
+                            Forma en que se realizó el ingreso o egreso
+                        </div>
+                    </div>
+
                     <!-- Amount -->
                     <div class="mb-3">
                         <label for="amount" class="form-label">

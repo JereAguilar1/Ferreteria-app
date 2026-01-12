@@ -5,11 +5,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from app.models import (
     PurchaseInvoice, InvoiceStatus,
-    FinanceLedger, LedgerType, LedgerReferenceType
+    FinanceLedger, LedgerType, LedgerReferenceType, PaymentMethod  # MEJORA 12
 )
 
 
-def pay_invoice(invoice_id: int, paid_at: date, session) -> None:
+def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = 'CASH') -> None:
     """
     Mark a purchase invoice as PAID and register EXPENSE in finance_ledger.
     
@@ -18,13 +18,14 @@ def pay_invoice(invoice_id: int, paid_at: date, session) -> None:
     2. Validate invoice exists and is PENDING
     3. Validate paid_at is provided
     4. Update invoice: status=PAID, paid_at=paid_at
-    5. Insert finance_ledger: type=EXPENSE, amount=total_amount, reference=INVOICE_PAYMENT
+    5. Insert finance_ledger: type=EXPENSE, amount=total_amount, reference=INVOICE_PAYMENT, payment_method
     6. Commit or rollback
     
     Args:
         invoice_id: ID of the invoice to pay
         paid_at: Payment date
         session: SQLAlchemy session
+        payment_method: 'CASH' or 'TRANSFER' (MEJORA 12)
         
     Raises:
         ValueError: For business logic errors
@@ -74,14 +75,24 @@ def pay_invoice(invoice_id: int, paid_at: date, session) -> None:
         
         session.flush()  # Ensure invoice is updated before creating ledger entry
         
-        # Step 5: Create finance_ledger entry (EXPENSE)
+        # Step 5: Create finance_ledger entry (EXPENSE) with payment_method (MEJORA 12)
+        # FIX: Normalize payment_method to ensure it's a valid string
+        from app.models import normalize_payment_method
+        payment_method_normalized = normalize_payment_method(payment_method)
+        
+        # Sanitize notes to prevent issues with special characters (backslashes, quotes, etc.)
+        supplier_name_safe = str(invoice.supplier.name).replace('\\', '/').replace('\n', ' ').replace('\r', '')
+        invoice_number_safe = str(invoice.invoice_number).replace('\\', '/').replace('\n', ' ').replace('\r', '')
+        notes_text = f'Pago boleta #{invoice_number_safe} - {supplier_name_safe}'
+        
         ledger_entry = FinanceLedger(
             datetime=datetime.now(),
             type=LedgerType.EXPENSE,
             amount=invoice.total_amount,
             reference_type=LedgerReferenceType.INVOICE_PAYMENT,
             reference_id=invoice.id,
-            notes=f'Pago boleta #{invoice.invoice_number} - {invoice.supplier.name}'
+            notes=notes_text[:500],  # Limit length to prevent issues
+            payment_method=payment_method_normalized  # MEJORA 12 FIX
         )
         
         session.add(ledger_entry)

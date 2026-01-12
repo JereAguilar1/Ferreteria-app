@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS stock_move_line (
   id            BIGSERIAL PRIMARY KEY,
   stock_move_id BIGINT NOT NULL REFERENCES stock_move(id) ON UPDATE RESTRICT ON DELETE CASCADE,
   product_id    BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  qty           NUMERIC(12,3) NOT NULL CHECK (qty > 0),
+  qty           NUMERIC(12,3) NOT NULL CHECK (qty != 0),  -- Allow negative for ADJUST
   uom_id        BIGINT NOT NULL REFERENCES uom(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   unit_cost     NUMERIC(12,4) CHECK (unit_cost >= 0)
 );
@@ -359,13 +359,14 @@ BEGIN
   SELECT type INTO v_type FROM stock_move WHERE id = NEW.stock_move_id;
 
   IF v_type = 'IN' THEN
-    v_delta := NEW.qty;
+    v_delta := NEW.qty;  -- IN: adds stock (positive qty)
   ELSIF v_type = 'OUT' THEN
-    v_delta := -NEW.qty;
+    v_delta := -NEW.qty;  -- OUT: removes stock (negative delta from positive qty)
   ELSE
-    -- ADJUST: treat as signed via notes? For simplicity, use qty as positive and require MANUAL logic in app.
-    -- If you want signed adjustments, add column "signed_qty" instead.
-    v_delta := NEW.qty;
+    -- ADJUST: qty is already signed (positive = add, negative = subtract)
+    -- For corrections: if sold MORE -> qty is negative (reduce stock)
+    --                  if sold LESS -> qty is positive (increase stock)
+    v_delta := NEW.qty;  -- Use qty as-is (can be negative)
   END IF;
 
   PERFORM apply_stock_delta(NEW.product_id, v_delta);
@@ -422,5 +423,40 @@ CREATE TRIGGER product_set_updated_at
 BEFORE UPDATE ON product
 FOR EACH ROW
 EXECUTE FUNCTION trg_set_updated_at();
+
+-- =========================
+-- MISSING PRODUCT REQUESTS (MEJORA 18)
+-- =========================
+-- Tracks products that customers request but are not in the system
+CREATE TABLE IF NOT EXISTS missing_product_request (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    normalized_name VARCHAR(255) NOT NULL UNIQUE,
+    request_count INTEGER NOT NULL DEFAULT 1 CHECK (request_count >= 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'RESOLVED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_requested_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_missing_product_status ON missing_product_request(status);
+CREATE INDEX IF NOT EXISTS idx_missing_product_count_desc ON missing_product_request(request_count DESC);
+CREATE INDEX IF NOT EXISTS idx_missing_product_last_requested_at ON missing_product_request(last_requested_at DESC);
+
+-- Trigger to auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION trg_missing_product_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at := now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS missing_product_set_updated_at ON missing_product_request;
+CREATE TRIGGER missing_product_set_updated_at
+    BEFORE UPDATE ON missing_product_request
+    FOR EACH ROW
+    EXECUTE FUNCTION trg_missing_product_set_updated_at();
 
 COMMIT;

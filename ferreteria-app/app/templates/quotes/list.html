@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Presupuestos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-file-earmark-text"></i> Presupuestos</h1>
+    <a href="{{ url_for('sales.new_sale') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Crear Nuevo
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('quotes.list_quotes') }}" class="row g-3">
+            <div class="col-md-3">
+                <label for="status" class="form-label">Estado</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="">Todos</option>
+                    <option value="DRAFT" {% if status_filter == 'DRAFT' %}selected{% endif %}>Borrador</option>
+                    <option value="SENT" {% if status_filter == 'SENT' %}selected{% endif %}>Enviado</option>
+                    <option value="ACCEPTED" {% if status_filter == 'ACCEPTED' %}selected{% endif %}>Aceptado</option>
+                    <option value="CANCELED" {% if status_filter == 'CANCELED' %}selected{% endif %}>Cancelado</option>
+                </select>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="q" class="form-label">Buscar</label>
+                <input type="text" 
+                       class="form-control" 
+                       id="q" 
+                       name="q" 
+                       value="{{ search }}"
+                       placeholder="Por número, nombre o teléfono">
+            </div>
+            
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+                <a href="{{ url_for('quotes.list_quotes') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> Limpiar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+{% if quotes %}
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Número</th>
+                        <th>Cliente</th>
+                        <th>Fecha Emisión</th>
+                        <th>Válido Hasta</th>
+                        <th class="text-end">Total</th>
+                        <th>Estado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for quote in quotes %}
+                    <tr>
+                        <td>
+                            <strong>{{ quote.quote_number }}</strong>
+                        </td>
+                        <td>
+                            <strong>{{ quote.customer_name }}</strong>
+                            {% if quote.customer_phone %}
+                            <br><small class="text-muted">
+                                <i class="bi bi-telephone"></i> {{ quote.customer_phone }}
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>{{ quote.issued_at|datetime_ar }}</td>
+                        <td>
+                            {% if quote.valid_until %}
+                            {{ quote.valid_until|date_ar }}
+                            {% if quote.display_expired %}
+                            <span class="badge bg-warning text-dark ms-1">
+                                <i class="bi bi-exclamation-triangle"></i> Vencido
+                            </span>
+                            {% endif %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <strong>${{ "%.2f"|format(quote.total_amount) }}</strong>
+                        </td>
+                        <td>
+                            {% if quote.status == 'DRAFT' %}
+                            <span class="badge bg-secondary">Borrador</span>
+                            {% elif quote.status == 'SENT' %}
+                            <span class="badge bg-info">Enviado</span>
+                            {% elif quote.status == 'ACCEPTED' %}
+                            <span class="badge bg-success">Aceptado</span>
+                            {% elif quote.status == 'CANCELED' %}
+                            <span class="badge bg-danger">Cancelado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('quotes.view_quote', quote_id=quote.id) }}" 
+                               class="btn btn-sm btn-outline-primary"
+                               title="Ver Detalle">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{{ url_for('quotes.download_pdf', quote_id=quote.id) }}" 
+                               class="btn btn-sm btn-outline-secondary"
+                               target="_blank"
+                               title="Descargar PDF">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info text-center">
+    <i class="bi bi-info-circle"></i>
+    <p class="mb-0">No se encontraron presupuestos.</p>
+    <small>Los presupuestos que cree desde el POS aparecerán aquí.</small>
+</div>
+{% endif %}
+{% endblock %}

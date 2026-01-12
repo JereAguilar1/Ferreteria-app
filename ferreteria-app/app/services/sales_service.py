@@ -10,7 +10,7 @@ from app.models import (
 )
 
 
-def confirm_sale(cart: dict, session) -> int:
+def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
     """
     Confirm sale with full transactional processing.
     
@@ -20,12 +20,13 @@ def confirm_sale(cart: dict, session) -> int:
     3. Validate sufficient stock
     4. Create sale and sale_lines
     5. Create stock_move and stock_move_lines (OUT)
-    6. Create finance_ledger entry (INCOME)
+    6. Create finance_ledger entry (INCOME) with payment_method
     7. Commit transaction
     
     Args:
         cart: Cart dictionary with items
         session: SQLAlchemy session
+        payment_method: 'CASH' or 'TRANSFER' (MEJORA 12)
     
     Returns:
         sale_id: ID of created sale
@@ -153,7 +154,11 @@ def confirm_sale(cart: dict, session) -> int:
             )
             session.add(stock_move_line)
         
-        # Step 8: Create FinanceLedger entry (INCOME)
+        # Step 8: Create FinanceLedger entry (INCOME) with payment_method (MEJORA 12)
+        # FIX: Normalize payment_method to ensure it's a valid string
+        from app.models import normalize_payment_method
+        payment_method_normalized = normalize_payment_method(payment_method)
+        
         ledger_entry = FinanceLedger(
             datetime=datetime.now(),
             type=LedgerType.INCOME,
@@ -161,7 +166,8 @@ def confirm_sale(cart: dict, session) -> int:
             category='Ventas',
             reference_type=LedgerReferenceType.SALE,
             reference_id=sale.id,
-            notes=f'Ingreso por venta #{sale.id}'
+            notes=f'Ingreso por venta #{sale.id}',
+            payment_method=payment_method_normalized
         )
         session.add(ledger_entry)
         

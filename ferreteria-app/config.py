@@ -38,4 +38,14 @@ class Config:
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = DEBUG
+    
+    # Stock Configuration (MEJORA 10 - Stock Filters)
+    LOW_STOCK_THRESHOLD = int(os.getenv('LOW_STOCK_THRESHOLD', '10'))
+    
+    # Business Information (for quotes/invoices)
+    BUSINESS_NAME = os.getenv('BUSINESS_NAME', 'Ferretería')
+    BUSINESS_ADDRESS = os.getenv('BUSINESS_ADDRESS', '')
+    BUSINESS_PHONE = os.getenv('BUSINESS_PHONE', '')
+    BUSINESS_EMAIL = os.getenv('BUSINESS_EMAIL', '')
+    QUOTE_VALID_DAYS = int(os.getenv('QUOTE_VALID_DAYS', '7'))
 

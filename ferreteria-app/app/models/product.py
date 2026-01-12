@@ -19,6 +19,7 @@ class Product(Base):
     active = Column(Boolean, nullable=False, default=True)
     sale_price = Column(Numeric(10, 2), nullable=False)
     image_path = Column(String(255), nullable=True)
+    min_stock_qty = Column(Numeric(12, 2), nullable=False, default=0, server_default='0')  # MEJORA 11
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     

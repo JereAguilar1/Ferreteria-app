@@ -38,7 +38,11 @@
                                    max="{{ item.product.on_hand_qty }}"
                                    class="form-control form-control-sm"
                                    style="width: 80px;"
-                                   hx-trigger="change">
+                                   hx-trigger="input changed delay:500ms, change"
+                                   hx-post="{{ url_for('sales.cart_update') }}"
+                                   hx-target="#cart-container"
+                                   hx-swap="outerHTML"
+                                   hx-include="[name='product_id']">
                         </form>
                     </td>
                     <td class="text-end">
@@ -72,13 +76,103 @@
         </table>
     </div>
     
-    <div class="d-grid gap-2">
-        <form method="POST" action="{{ url_for('sales.confirm') }}" 
-              onsubmit="return confirm('Confirmar venta?');">
-            <button type="submit" class="btn btn-success btn-lg w-100">
-                <i class="bi bi-check-circle"></i> Confirmar Venta (${{ "%.2f"|format(cart_total) }})
-            </button>
-        </form>
+    <!-- MEJORA 12/15: Payment Method Selection + Confirm Button -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <h6 class="card-title mb-3">
+                <i class="bi bi-cash-coin"></i> Método de Pago
+            </h6>
+            <div class="btn-group w-100 mb-3" role="group">
+                <input type="radio" class="btn-check" name="payment_method" id="method_cash" 
+                       value="CASH" checked autocomplete="off">
+                <label class="btn btn-outline-success" for="method_cash">
+                    <i class="bi bi-cash"></i> Efectivo
+                </label>
+                
+                <input type="radio" class="btn-check" name="payment_method" id="method_transfer" 
+                       value="TRANSFER" autocomplete="off">
+                <label class="btn btn-outline-primary" for="method_transfer">
+                    <i class="bi bi-bank"></i> Transferencia
+                </label>
+            </div>
+            
+            <!-- MEJORA 15: Open Confirmation Modal with HTMX -->
+            <div class="d-grid gap-2">
+                <button type="button" 
+                        class="btn btn-success btn-lg"
+                        hx-get="{{ url_for('sales.confirm_preview') }}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML"
+                        hx-vals='js:{"payment_method": document.querySelector("input[name=payment_method]:checked").value}'
+                        hx-indicator="#loading-indicator">
+                    <i class="bi bi-check-circle"></i> Confirmar Venta (${{ "%.2f"|format(cart_total) }})
+                </button>
+                <div id="loading-indicator" class="htmx-indicator text-center">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MEJORA 13/14: Save Quote Form with Customer Data -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <h6 class="mb-3">
+                <i class="bi bi-person"></i> Datos del Cliente (para presupuesto)
+            </h6>
+            <form method="POST" action="{{ url_for('quotes.create_from_cart') }}">
+                    
+                    <!-- Customer Name (required) -->
+                    <div class="mb-2">
+                        <label for="customer_name" class="form-label small">
+                            Nombre del Cliente <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" 
+                               class="form-control form-control-sm" 
+                               id="customer_name" 
+                               name="customer_name"
+                               placeholder="Ej: Juan Pérez"
+                               required
+                               maxlength="255">
+                    </div>
+                    
+                    <!-- Customer Phone (optional) -->
+                    <div class="mb-3">
+                        <label for="customer_phone" class="form-label small">
+                            Teléfono (opcional)
+                        </label>
+                        <input type="text" 
+                               class="form-control form-control-sm" 
+                               id="customer_phone" 
+                               name="customer_phone"
+                               placeholder="Ej: 11-5555-1234"
+                               maxlength="50">
+                    </div>
+                    
+                    <!-- Include payment_method if selected -->
+                    <input type="hidden" name="payment_method" id="save_quote_payment_method" value="">
+                    
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-file-earmark-text"></i> Guardar como Presupuesto
+                </button>
+            </form>
+            
+            <script>
+            // Sync payment method to save quote form when radio changes
+            document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.getElementById('save_quote_payment_method').value = this.value;
+                });
+            });
+            // Set initial value
+            const checkedMethod = document.querySelector('input[name="payment_method"]:checked');
+            if (checkedMethod) {
+                document.getElementById('save_quote_payment_method').value = checkedMethod.value;
+            }
+            </script>
+        </div>
     </div>
     {% else %}
     <div class="alert alert-info text-center">

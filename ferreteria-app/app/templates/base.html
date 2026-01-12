@@ -48,9 +48,31 @@
                             <i class="bi bi-box-seam"></i> Productos
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('sales.new_sale') }}">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarSalesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-cart"></i> Ventas
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="navbarSalesDropdown">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('sales.new_sale') }}">
+                                    <i class="bi bi-cart-plus"></i> Nueva Venta (POS)
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('sales.list_sales') }}">
+                                    <i class="bi bi-receipt"></i> Gestión de Ventas
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('quotes.list_quotes') }}">
+                            <i class="bi bi-file-earmark-text"></i> Presupuestos
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('missing_products.list_missing_products') }}">
+                            <i class="bi bi-exclamation-triangle"></i> Productos Faltantes
                         </a>
                     </li>
                     <li class="nav-item dropdown">

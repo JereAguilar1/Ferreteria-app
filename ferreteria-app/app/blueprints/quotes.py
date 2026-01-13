@@ -8,7 +8,8 @@ from app.models import Quote, QuoteLine, Product
 from app.services.quote_service import (
     create_quote_from_cart,
     generate_quote_pdf_from_db,
-    convert_quote_to_sale
+    convert_quote_to_sale,
+    update_quote
 )
 
 quotes_bp = Blueprint('quotes', __name__, url_prefix='/quotes')
@@ -59,8 +60,12 @@ def list_quotes():
             else:
                 quote.display_expired = False
         
+        # Check if HTMX request (live search)
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        template = 'quotes/_list_table.html' if is_htmx else 'quotes/list.html'
+        
         return render_template(
-            'quotes/list.html',
+            template,
             quotes=quotes,
             status_filter=status_filter,
             search=search
@@ -68,7 +73,11 @@ def list_quotes():
         
     except Exception as e:
         flash(f'Error al cargar presupuestos: {str(e)}', 'danger')
-        return render_template('quotes/list.html', quotes=[], status_filter='', search='')
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        template = 'quotes/_list_table.html' if is_htmx else 'quotes/list.html'
+        
+        return render_template(template, quotes=[], status_filter='', search='')
 
 
 @quotes_bp.route('/<int:quote_id>')
@@ -113,8 +122,8 @@ def create_from_cart():
             return redirect(url_for('sales.new_sale'))
         
         # Get payment method from form (optional, from MEJORA 12)
-        payment_method = request.form.get('payment_method', '').upper()
-        if payment_method not in ['CASH', 'TRANSFER', '']:
+        payment_method = request.form.get('payment_method', '').strip().upper()
+        if not payment_method or payment_method not in ['CASH', 'TRANSFER']:
             payment_method = None
         
         # Get notes (optional)
@@ -189,6 +198,54 @@ def download_pdf(quote_id):
     except Exception as e:
         flash(f'Error al generar PDF: {str(e)}', 'danger')
         return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+
+
+@quotes_bp.route('/<int:quote_id>/convert/preview')
+def convert_to_sale_preview(quote_id):
+    """Preview quote conversion details before confirmation (HTMX modal)."""
+    db_session = get_session()
+    
+    try:
+        quote = db_session.query(Quote).filter_by(id=quote_id).first()
+        
+        if not quote:
+            return '<div class="alert alert-danger">Presupuesto no encontrado.</div>'
+        
+        # Check if convertible
+        if quote.status not in ['DRAFT', 'SENT']:
+            return f'<div class="alert alert-danger">Solo se pueden convertir presupuestos DRAFT o SENT. Estado actual: {quote.status}</div>'
+        
+        if quote.sale_id:
+            return '<div class="alert alert-danger">Este presupuesto ya fue convertido a venta.</div>'
+        
+        # Check stock availability for each line
+        # Ensure products and their stock are loaded
+        from app.models import ProductStock
+        stock_warnings = []
+        for line in quote.lines:
+            # Get current stock from ProductStock table
+            product_stock = db_session.query(ProductStock).filter_by(product_id=line.product_id).first()
+            if product_stock:
+                available = product_stock.on_hand_qty or 0
+                if available < line.qty:
+                    stock_warnings.append(
+                        f"{line.product.name}: necesita {line.qty}, disponible {available}"
+                    )
+            else:
+                # No stock record means 0 stock
+                available = 0
+                if available < line.qty:
+                    stock_warnings.append(
+                        f"{line.product.name}: necesita {line.qty}, disponible 0"
+                    )
+        
+        return render_template('quotes/_convert_confirm_modal.html',
+                             quote=quote,
+                             stock_warnings=stock_warnings)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating conversion preview for quote {quote_id}: {e}")
+        return f'<div class="alert alert-danger">Error al generar vista previa: {str(e)}</div>'
 
 
 @quotes_bp.route('/<int:quote_id>/convert', methods=['POST'])
@@ -280,3 +337,314 @@ def mark_as_sent(quote_id):
         db_session.rollback()
         flash(f'Error al actualizar presupuesto: {str(e)}', 'danger')
         return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+
+
+def is_quote_editable(quote):
+    """Check if a quote can be edited."""
+    if quote.status not in ['DRAFT', 'SENT']:
+        return False, f'El presupuesto está en estado {quote.status}. Solo se pueden editar presupuestos en estado DRAFT o SENT.'
+    
+    # Check if expired
+    today = date.today()
+    if quote.valid_until and quote.valid_until < today:
+        return False, f'Este presupuesto está vencido (válido hasta {quote.valid_until.strftime("%d/%m/%Y")}). No se puede editar.'
+    
+    return True, None
+
+
+@quotes_bp.route('/<int:quote_id>/edit', methods=['GET'])
+def edit_quote(quote_id):
+    """Show form to edit a quote."""
+    db_session = get_session()
+    
+    try:
+        quote = db_session.query(Quote).filter_by(id=quote_id).first()
+        
+        if not quote:
+            flash('Presupuesto no encontrado.', 'danger')
+            return redirect(url_for('quotes.list_quotes'))
+        
+        # Validate quote is editable
+        can_edit, error_msg = is_quote_editable(quote)
+        if not can_edit:
+            flash(error_msg, 'danger')
+            return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+        
+        # Get all active products for the product selector
+        products = db_session.query(Product).filter_by(active=True).order_by(Product.name).all()
+        
+        return render_template('quotes/edit.html', quote=quote, products=products)
+        
+    except Exception as e:
+        flash(f'Error al cargar formulario de edición: {str(e)}', 'danger')
+        return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+
+
+@quotes_bp.route('/<int:quote_id>/edit/preview', methods=['POST'])
+def edit_quote_preview(quote_id):
+    """Preview quote changes before confirmation (HTMX modal)."""
+    db_session = get_session()
+    
+    try:
+        quote = db_session.query(Quote).filter_by(id=quote_id).first()
+        
+        if not quote:
+            return '<div class="alert alert-danger">Presupuesto no encontrado.</div>'
+        
+        # Validate quote is editable
+        can_edit, error_msg = is_quote_editable(quote)
+        if not can_edit:
+            return f'<div class="alert alert-danger">{error_msg}</div>'
+        
+        # Parse form data
+        payment_method = request.form.get('payment_method', '').strip().upper() or None
+        if payment_method and payment_method not in ['CASH', 'TRANSFER']:
+            payment_method = None
+        
+        valid_until_str = request.form.get('valid_until', '').strip()
+        valid_until = None
+        if valid_until_str:
+            try:
+                valid_until = datetime.strptime(valid_until_str, '%Y-%m-%d').date()
+            except ValueError:
+                return '<div class="alert alert-danger">Fecha de validez inválida.</div>'
+        
+        notes = request.form.get('notes', '').strip() or None
+        
+        # Parse lines from form
+        # Format: lines[0][product_id], lines[0][qty], lines[1][product_id], lines[1][qty], etc.
+        lines_data = []
+        line_index = 0
+        
+        while True:
+            product_id_key = f'lines[{line_index}][product_id]'
+            qty_key = f'lines[{line_index}][qty]'
+            
+            if product_id_key not in request.form:
+                break
+            
+            product_id = request.form.get(product_id_key, '').strip()
+            qty = request.form.get(qty_key, '').strip()
+            
+            if not product_id or not qty:
+                line_index += 1
+                continue
+            
+            try:
+                product_id_int = int(product_id)
+                qty_decimal = Decimal(str(qty))
+                
+                if qty_decimal <= 0:
+                    return f'<div class="alert alert-danger">La cantidad debe ser mayor a 0 en la línea {line_index + 1}.</div>'
+                
+                # Get product
+                product = db_session.query(Product).filter_by(id=product_id_int).first()
+                if not product:
+                    return f'<div class="alert alert-danger">Producto con ID {product_id_int} no encontrado.</div>'
+                
+                if not product.active:
+                    return f'<div class="alert alert-danger">El producto "{product.name}" está inactivo.</div>'
+                
+                lines_data.append({
+                    'product_id': product_id_int,
+                    'qty': qty_decimal,
+                    'product': product
+                })
+                
+            except (ValueError, TypeError) as e:
+                return f'<div class="alert alert-danger">Error en línea {line_index + 1}: {str(e)}</div>'
+            
+            line_index += 1
+        
+        if not lines_data:
+            return '<div class="alert alert-danger">Debe agregar al menos una línea.</div>'
+        
+        # Build "before" and "after" comparison
+        old_lines_by_product = {line.product_id: line for line in quote.lines}
+        new_lines_by_product = {line['product_id']: line for line in lines_data}
+        
+        # Calculate old and new totals
+        old_total = quote.total_amount
+        new_total = Decimal('0.00')
+        
+        changes = {
+            'added': [],
+            'removed': [],
+            'modified': []
+        }
+        
+        # Check for removed lines
+        for old_line in quote.lines:
+            if old_line.product_id not in new_lines_by_product:
+                changes['removed'].append({
+                    'product': old_line.product_name_snapshot,
+                    'qty': old_line.qty,
+                    'unit_price': old_line.unit_price,
+                    'line_total': old_line.line_total
+                })
+        
+        # Check for added/modified lines
+        for new_line_data in lines_data:
+            product_id = new_line_data['product_id']
+            new_qty = new_line_data['qty']
+            product = new_line_data['product']
+            
+            # Determine unit_price (freeze price logic)
+            if product_id in old_lines_by_product:
+                old_line = old_lines_by_product[product_id]
+                unit_price = old_line.unit_price  # Keep old price
+                product_name_snapshot = old_line.product_name_snapshot
+                is_new = False
+            else:
+                unit_price = Decimal(str(product.sale_price))  # Use current price
+                product_name_snapshot = product.name
+                is_new = True
+            
+            line_total = (new_qty * unit_price).quantize(Decimal('0.01'))
+            new_total += line_total
+            
+            if is_new:
+                changes['added'].append({
+                    'product': product_name_snapshot,
+                    'qty': new_qty,
+                    'unit_price': unit_price,
+                    'line_total': line_total
+                })
+            else:
+                old_line = old_lines_by_product[product_id]
+                if old_line.qty != new_qty or old_line.unit_price != unit_price:
+                    changes['modified'].append({
+                        'product': product_name_snapshot,
+                        'old_qty': old_line.qty,
+                        'new_qty': new_qty,
+                        'unit_price': unit_price,
+                        'old_line_total': old_line.line_total,
+                        'new_line_total': line_total
+                    })
+        
+        # Check if there are any changes
+        has_changes = (
+            len(changes['added']) > 0 or
+            len(changes['removed']) > 0 or
+            len(changes['modified']) > 0 or
+            payment_method != quote.payment_method or
+            valid_until != quote.valid_until or
+            notes != quote.notes or
+            old_total != new_total
+        )
+        
+        if not has_changes:
+            return '<div class="alert alert-info">No hay cambios para aplicar.</div>'
+        
+        return render_template('quotes/_edit_confirm_modal.html',
+                             quote=quote,
+                             old_total=old_total,
+                             new_total=new_total,
+                             changes=changes,
+                             payment_method=payment_method,
+                             valid_until=valid_until,
+                             notes=notes)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating edit preview for quote {quote_id}: {e}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return f'<div class="alert alert-danger">Error al generar vista previa: {str(e)}</div>'
+
+
+@quotes_bp.route('/<int:quote_id>/edit', methods=['POST'])
+def save_quote_edit(quote_id):
+    """Save quote changes (transactional)."""
+    db_session = get_session()
+    
+    try:
+        quote = db_session.query(Quote).filter_by(id=quote_id).first()
+        
+        if not quote:
+            flash('Presupuesto no encontrado.', 'danger')
+            return redirect(url_for('quotes.list_quotes'))
+        
+        # Validate quote is editable
+        can_edit, error_msg = is_quote_editable(quote)
+        if not can_edit:
+            flash(error_msg, 'danger')
+            return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+        
+        # Parse form data
+        payment_method = request.form.get('payment_method', '').strip().upper() or None
+        if payment_method and payment_method not in ['CASH', 'TRANSFER']:
+            payment_method = None
+        
+        valid_until_str = request.form.get('valid_until', '').strip()
+        valid_until = None
+        if valid_until_str:
+            try:
+                valid_until = datetime.strptime(valid_until_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Fecha de validez inválida.', 'danger')
+                return redirect(url_for('quotes.edit_quote', quote_id=quote_id))
+        
+        notes = request.form.get('notes', '').strip() or None
+        
+        # Parse lines from form
+        lines_data = []
+        line_index = 0
+        
+        while True:
+            product_id_key = f'lines[{line_index}][product_id]'
+            qty_key = f'lines[{line_index}][qty]'
+            
+            if product_id_key not in request.form:
+                break
+            
+            product_id = request.form.get(product_id_key, '').strip()
+            qty = request.form.get(qty_key, '').strip()
+            
+            if not product_id or not qty:
+                line_index += 1
+                continue
+            
+            try:
+                product_id_int = int(product_id)
+                qty_decimal = Decimal(str(qty))
+                
+                if qty_decimal <= 0:
+                    flash(f'La cantidad debe ser mayor a 0 en la línea {line_index + 1}.', 'danger')
+                    return redirect(url_for('quotes.edit_quote', quote_id=quote_id))
+                
+                lines_data.append({
+                    'product_id': product_id_int,
+                    'qty': qty_decimal
+                })
+                
+            except (ValueError, TypeError) as e:
+                flash(f'Error en línea {line_index + 1}: {str(e)}', 'danger')
+                return redirect(url_for('quotes.edit_quote', quote_id=quote_id))
+            
+            line_index += 1
+        
+        if not lines_data:
+            flash('Debe agregar al menos una línea.', 'danger')
+            return redirect(url_for('quotes.edit_quote', quote_id=quote_id))
+        
+        # Call service to update quote
+        update_quote(
+            quote_id=quote_id,
+            session=db_session,
+            lines_data=lines_data,
+            payment_method=payment_method,
+            valid_until=valid_until,
+            notes=notes
+        )
+        
+        flash('Presupuesto actualizado exitosamente.', 'success')
+        return redirect(url_for('quotes.view_quote', quote_id=quote_id))
+        
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('quotes.edit_quote', quote_id=quote_id))
+        
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error al actualizar presupuesto: {str(e)}', 'danger')
+        return redirect(url_for('quotes.edit_quote', quote_id=quote_id))

@@ -99,7 +99,7 @@
                 <h5 class="card-title mb-0">Total</h5>
             </div>
             <div class="card-body text-center">
-                <h1 class="display-4 text-success mb-0">${{ "%.2f"|format(quote.total_amount) }}</h1>
+                <h1 class="display-4 text-success mb-0">${{ quote.total_amount|money_ar }}</h1>
             </div>
         </div>
         
@@ -117,15 +117,23 @@
                         <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
                     </a>
                     
+                    <!-- Edit Quote (MEJORA 22) -->
+                    {% if quote.status in ['DRAFT', 'SENT'] and not quote.is_expired %}
+                    <a href="{{ url_for('quotes.edit_quote', quote_id=quote.id) }}" 
+                       class="btn btn-outline-primary w-100">
+                        <i class="bi bi-pencil"></i> Editar Presupuesto
+                    </a>
+                    {% endif %}
+                    
                     <!-- Convert to Sale -->
                     {% if quote.is_convertible %}
-                    <form method="POST" 
-                          action="{{ url_for('quotes.convert_to_sale', quote_id=quote.id) }}"
-                          onsubmit="return confirm('¿Convertir este presupuesto a venta?\n\nSe descontará el stock y se registrará el ingreso en el libro mayor.');">
-                        <button type="submit" class="btn btn-success w-100">
-                            <i class="bi bi-check-circle"></i> Convertir a Venta
-                        </button>
-                    </form>
+                    <button type="button" 
+                            class="btn btn-success w-100"
+                            hx-get="{{ url_for('quotes.convert_to_sale_preview', quote_id=quote.id) }}"
+                            hx-target="#modal-container"
+                            hx-swap="innerHTML">
+                        <i class="bi bi-check-circle"></i> Convertir a Venta
+                    </button>
                     {% endif %}
                     
                     <!-- Mark as Sent -->
@@ -236,4 +244,7 @@
     Este presupuesto ha sido cancelado y no puede ser convertido a venta.
 </div>
 {% endif %}
+
+<!-- Modal Container for HTMX -->
+<div id="modal-container"></div>
 {% endblock %}

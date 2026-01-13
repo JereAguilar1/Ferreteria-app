@@ -120,7 +120,12 @@ def list_products():
         # Order by name
         products = query.order_by(Product.name).all()
         
-        return render_template('products/list.html', 
+        # Check if request is from HTMX (live search)
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        
+        template = 'products/_list_table.html' if is_htmx else 'products/list.html'
+        
+        return render_template(template, 
                              products=products, 
                              search_query=search_query,
                              categories=categories,
@@ -130,11 +135,16 @@ def list_products():
     except Exception as e:
         flash(f'Error al cargar productos: {str(e)}', 'danger')
         categories = session.query(Category).order_by(Category.name).all()
-        return render_template('products/list.html', 
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        template = 'products/_list_table.html' if is_htmx else 'products/list.html'
+        
+        return render_template(template, 
                              products=[], 
                              search_query='',
                              categories=categories,
-                             selected_category_id='')
+                             selected_category_id='',
+                             selected_stock_filter='')
 
 
 @catalog_bp.route('/new', methods=['GET'])
@@ -447,5 +457,83 @@ def toggle_active(product_id):
     except Exception as e:
         session.rollback()
         flash(f'Error al cambiar estado: {str(e)}', 'danger')
+        return redirect(url_for('catalog.list_products'))
+
+
+@catalog_bp.route('/<int:product_id>/delete', methods=['POST'])
+def delete_product(product_id):
+    """
+    Delete a product permanently.
+    
+    This operation will fail (by design) if the product has any associated:
+    - Sales lines
+    - Purchase invoice lines
+    - Stock move lines
+    
+    In those cases, the user should use 'toggle_active' (deactivate) instead.
+    """
+    session = get_session()
+    
+    try:
+        product = session.query(Product).filter_by(id=product_id).first()
+        
+        if not product:
+            flash('Producto no encontrado', 'danger')
+            return redirect(url_for('catalog.list_products'))
+        
+        # Store product name for flash message
+        product_name = product.name
+        image_path = product.image_path
+        
+        try:
+            # Try to delete the product
+            # If there are foreign key references, this will raise IntegrityError
+            session.delete(product)
+            session.commit()
+            
+            # If deletion succeeded, also delete the image file if exists
+            if image_path:
+                try:
+                    image_full_path = os.path.join(
+                        current_app.root_path, 
+                        'static', 
+                        'uploads', 
+                        'products', 
+                        image_path
+                    )
+                    if os.path.exists(image_full_path):
+                        os.remove(image_full_path)
+                except Exception as img_err:
+                    # Don't fail the whole operation if image deletion fails
+                    current_app.logger.warning(f"Failed to delete image {image_path}: {img_err}")
+            
+            flash(f'Producto "{product_name}" eliminado exitosamente', 'success')
+            return redirect(url_for('catalog.list_products'))
+            
+        except IntegrityError as integrity_err:
+            session.rollback()
+            error_detail = str(integrity_err.orig).lower()
+            
+            # Provide user-friendly message
+            if 'foreign key' in error_detail or 'violates foreign key constraint' in error_detail:
+                flash(
+                    f'No se puede eliminar el producto "{product_name}" porque tiene '
+                    'movimientos, ventas o compras asociadas. '
+                    'Use la opción "Desactivar" en su lugar.',
+                    'warning'
+                )
+            else:
+                flash(
+                    f'No se puede eliminar el producto "{product_name}" debido a referencias en el sistema. '
+                    'Use la opción "Desactivar" en su lugar.',
+                    'warning'
+                )
+            
+            return redirect(url_for('catalog.list_products'))
+        
+    except Exception as e:
+        session.rollback()
+        current_app.logger.error(f"Error deleting product {product_id}: {e}")
+        flash(f'Error al eliminar producto: {str(e)}', 'danger')
         return redirect(url_for('catalog.list_products'))
 

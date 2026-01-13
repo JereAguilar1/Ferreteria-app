@@ -23,7 +23,7 @@
                     <td class="text-center">
                         <span class="badge bg-info">{{ item.product.uom.symbol }}</span>
                     </td>
-                    <td class="text-end">${{ "%.2f"|format(item.unit_price) }}</td>
+                    <td class="text-end">${{ item.unit_price|money_ar }}</td>
                     <td>
                         <form hx-post="{{ url_for('sales.cart_update') }}"
                               hx-target="#cart-container"
@@ -46,7 +46,7 @@
                         </form>
                     </td>
                     <td class="text-end">
-                        <strong>${{ "%.2f"|format(item.subtotal) }}</strong>
+                        <strong>${{ item.subtotal|money_ar }}</strong>
                     </td>
                     <td class="text-center">
                         <form hx-post="{{ url_for('sales.cart_remove') }}"
@@ -68,7 +68,7 @@
                 <tr class="table-active">
                     <td colspan="4" class="text-end"><strong>TOTAL:</strong></td>
                     <td class="text-end">
-                        <h5 class="mb-0">${{ "%.2f"|format(cart_total) }}</h5>
+                        <h5 class="mb-0">${{ cart_total|money_ar }}</h5>
                     </td>
                     <td></td>
                 </tr>
@@ -105,7 +105,7 @@
                         hx-swap="innerHTML"
                         hx-vals='js:{"payment_method": document.querySelector("input[name=payment_method]:checked").value}'
                         hx-indicator="#loading-indicator">
-                    <i class="bi bi-check-circle"></i> Confirmar Venta (${{ "%.2f"|format(cart_total) }})
+                    <i class="bi bi-check-circle"></i> Confirmar Venta (${{ cart_total|money_ar }})
                 </button>
                 <div id="loading-indicator" class="htmx-indicator text-center">
                     <div class="spinner-border spinner-border-sm text-primary" role="status">

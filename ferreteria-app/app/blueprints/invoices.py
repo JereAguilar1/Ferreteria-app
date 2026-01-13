@@ -1,11 +1,13 @@
 """Invoices blueprint for purchase invoice management."""
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from sqlalchemy import and_
 from app.database import get_session
 from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus
 from app.services.invoice_service import create_invoice_with_lines
 from app.services.payment_service import pay_invoice
+from app.services.invoice_alerts_service import is_invoice_overdue
 
 invoices_bp = Blueprint('invoices', __name__, url_prefix='/invoices')
 
@@ -43,13 +45,16 @@ def clear_invoice_draft():
 
 @invoices_bp.route('/')
 def list_invoices():
-    """List all purchase invoices."""
+    """List all purchase invoices, ordered by due date."""
     db_session = get_session()
     
     try:
         # Optional filters
         supplier_id = request.args.get('supplier_id', type=int)
         status = request.args.get('status', '').upper()
+        search_query = request.args.get('q', '').strip()
+        due_soon = request.args.get('due_soon', type=int)  # MEJORA 21
+        overdue = request.args.get('overdue', type=int)  # MEJORA 21
         
         query = db_session.query(PurchaseInvoice)
         
@@ -59,24 +64,72 @@ def list_invoices():
         if status and status in ['PENDING', 'PAID']:
             query = query.filter(PurchaseInvoice.status == InvoiceStatus[status])
         
-        invoices = query.order_by(PurchaseInvoice.created_at.desc()).all()
+        # MEJORA 21: Filter by due soon (tomorrow)
+        if due_soon:
+            tomorrow = date.today() + timedelta(days=1)
+            query = query.filter(
+                and_(
+                    PurchaseInvoice.status == InvoiceStatus.PENDING,
+                    PurchaseInvoice.due_date == tomorrow
+                )
+            )
+        
+        # MEJORA 21: Filter by overdue
+        if overdue:
+            today = date.today()
+            query = query.filter(
+                and_(
+                    PurchaseInvoice.status == InvoiceStatus.PENDING,
+                    PurchaseInvoice.due_date < today,
+                    PurchaseInvoice.due_date.isnot(None)
+                )
+            )
+        
+        # Search by invoice number
+        if search_query:
+            query = query.filter(PurchaseInvoice.invoice_number.ilike(f'%{search_query}%'))
+        
+        # MEJORA 21: Order by due_date (ascending, NULLS LAST), then by created_at (descending)
+        invoices = query.order_by(
+            PurchaseInvoice.due_date.asc().nullslast(),
+            PurchaseInvoice.created_at.desc()
+        ).all()
+        
+        # MEJORA 21: Calculate "overdue" status for each invoice
+        today = date.today()
+        for invoice in invoices:
+            invoice.is_overdue = is_invoice_overdue(invoice, today)
         
         # Get suppliers for filter
         suppliers = db_session.query(Supplier).order_by(Supplier.name).all()
         
-        return render_template('invoices/list.html',
+        # Check if HTMX request (live search)
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        template = 'invoices/_list_table.html' if is_htmx else 'invoices/list.html'
+        
+        return render_template(template,
                              invoices=invoices,
                              suppliers=suppliers,
                              selected_supplier=supplier_id,
-                             selected_status=status)
+                             selected_status=status,
+                             search_query=search_query,
+                             due_soon=due_soon,
+                             overdue=overdue)
         
     except Exception as e:
         flash(f'Error al cargar boletas: {str(e)}', 'danger')
-        return render_template('invoices/list.html',
+        
+        is_htmx = request.headers.get('HX-Request') == 'true'
+        template = 'invoices/_list_table.html' if is_htmx else 'invoices/list.html'
+        
+        return render_template(template,
                              invoices=[],
                              suppliers=[],
                              selected_supplier=None,
-                             selected_status='')
+                             selected_status='',
+                             search_query='',
+                             due_soon=None,
+                             overdue=None)
 
 
 @invoices_bp.route('/<int:invoice_id>')
@@ -91,8 +144,12 @@ def view_invoice(invoice_id):
             flash('Boleta no encontrada', 'danger')
             return redirect(url_for('invoices.list_invoices'))
         
+        # MEJORA 21: Calculate overdue status
+        today_date = date.today()
+        invoice.is_overdue = is_invoice_overdue(invoice, today_date)
+        
         # Pass today's date for payment form default
-        today = date.today().strftime('%Y-%m-%d')
+        today = today_date.strftime('%Y-%m-%d')
         
         return render_template('invoices/detail.html', invoice=invoice, today=today)
         
@@ -253,6 +310,88 @@ def remove_draft_line(product_id):
     except Exception as e:
         flash(f'Error al remover línea: {str(e)}', 'danger')
         return redirect(url_for('invoices.new_invoice'))
+
+
+@invoices_bp.route('/new/confirm-preview', methods=['GET'])
+def confirm_create_preview():
+    """Preview invoice creation details before confirmation (HTMX modal)."""
+    db_session = get_session()
+    
+    try:
+        draft = get_invoice_draft()
+        
+        # Validate draft has required data
+        errors = []
+        
+        if not draft.get('supplier_id'):
+            errors.append('Debe seleccionar un proveedor')
+        
+        if not draft.get('invoice_number'):
+            errors.append('El número de boleta es requerido')
+        
+        if not draft.get('invoice_date'):
+            errors.append('La fecha de boleta es requerida')
+        
+        if not draft.get('lines'):
+            errors.append('Debe agregar al menos un ítem a la boleta')
+        
+        if errors:
+            error_html = '<div class="alert alert-danger"><ul class="mb-0">'
+            for error in errors:
+                error_html += f'<li>{error}</li>'
+            error_html += '</ul></div>'
+            return error_html
+        
+        # Get supplier
+        supplier = db_session.query(Supplier).filter_by(id=draft['supplier_id']).first()
+        if not supplier:
+            return '<div class="alert alert-danger">Proveedor no encontrado.</div>'
+        
+        # Get products for lines
+        products = db_session.query(Product).filter_by(active=True).all()
+        product_dict = {p.id: p for p in products}
+        
+        # Prepare lines with product info
+        lines_data = []
+        total_amount = Decimal('0.00')
+        
+        for line in draft['lines']:
+            product_id = line['product_id']
+            product = product_dict.get(product_id)
+            
+            if not product:
+                continue
+            
+            qty = Decimal(str(line['qty']))
+            unit_cost = Decimal(str(line['unit_cost']))
+            line_total = qty * unit_cost
+            total_amount += line_total
+            
+            lines_data.append({
+                'product': product,
+                'qty': qty,
+                'unit_cost': unit_cost,
+                'line_total': line_total
+            })
+        
+        # Parse dates for display
+        try:
+            invoice_date = datetime.strptime(draft['invoice_date'], '%Y-%m-%d').date()
+            due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date() if draft.get('due_date') else None
+        except ValueError:
+            return '<div class="alert alert-danger">Fecha inválida en el draft.</div>'
+        
+        return render_template('invoices/_create_confirm_modal.html',
+                             supplier=supplier,
+                             invoice_number=draft['invoice_number'],
+                             invoice_date=invoice_date,
+                             due_date=due_date,
+                             lines=lines_data,
+                             total_amount=total_amount)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating create preview: {e}")
+        return f'<div class="alert alert-danger">Error al generar vista previa: {str(e)}</div>'
 
 
 @invoices_bp.route('/create', methods=['POST'])

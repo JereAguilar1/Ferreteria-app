@@ -1,141 +1,203 @@
 """
-Formatters for date and datetime display in Argentine format.
-Centralized utility functions to ensure consistent formatting across the application.
+Utilidades de formateo para templates.
+Incluye formatos de números, fechas y otros en estilo argentino.
 """
-
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
+from typing import Union, Optional
 
 
-def date_ar(value):
+def num_ar(value: Union[int, float, Decimal, str, None], decimals: Optional[int] = None) -> str:
     """
-    Format a date object to Argentine format (DD/MM/YYYY).
+    Formatea un número en estilo argentino:
+    - Separador de miles: punto (.)
+    - Separador decimal: coma (,)
+    - Si no tiene decimales significativos, no los muestra
     
     Args:
-        value: date, datetime, or None
-        
+        value: Número a formatear
+        decimals: Cantidad fija de decimales (None = automático)
+    
     Returns:
-        String in format DD/MM/YYYY or "-" if None
+        String formateado
+    
+    Examples:
+        num_ar(1500) -> "1.500"
+        num_ar(1500.5) -> "1.500,5"
+        num_ar(1500.75) -> "1.500,75"
+        num_ar(185.00) -> "185"
+        num_ar(100550.00) -> "100.550"
+        num_ar(None) -> "-"
+    """
+    if value is None or value == "":
+        return "-"
+    
+    try:
+        # Convertir a Decimal para precisión
+        if isinstance(value, str):
+            value = value.replace(",", ".")
+        num = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return "-"
+    
+    # Si es cero
+    if num == 0:
+        return "0"
+    
+    # Determinar si tiene decimales significativos
+    if decimals is not None:
+        # Decimales fijos
+        num = num.quantize(Decimal(10) ** -decimals)
+    
+    # Separar parte entera y decimal
+    sign, digits, exponent = num.as_tuple()
+    
+    # Construir número como string sin notación científica
+    num_str = str(num)
+    
+    # Separar parte entera y decimal
+    if '.' in num_str:
+        integer_part, decimal_part = num_str.split('.')
+        # Eliminar ceros finales en decimales
+        decimal_part = decimal_part.rstrip('0')
+    else:
+        integer_part = num_str
+        decimal_part = ""
+    
+    # Manejar signo negativo
+    if integer_part.startswith('-'):
+        sign_str = '-'
+        integer_part = integer_part[1:]
+    else:
+        sign_str = ''
+    
+    # Agregar separador de miles (punto)
+    # Revertir, agrupar de 3, revertir de nuevo
+    reversed_int = integer_part[::-1]
+    groups = [reversed_int[i:i+3] for i in range(0, len(reversed_int), 3)]
+    integer_formatted = '.'.join(groups)[::-1]
+    
+    # Construir resultado
+    if decimal_part:
+        return f"{sign_str}{integer_formatted},{decimal_part}"
+    else:
+        return f"{sign_str}{integer_formatted}"
+
+
+def money_ar(value: Union[int, float, Decimal, str, None]) -> str:
+    """
+    Formatea un monto monetario en estilo argentino.
+    Alias de num_ar específico para dinero.
+    
+    Args:
+        value: Monto a formatear
+    
+    Returns:
+        String formateado
+    
+    Examples:
+        money_ar(1500.00) -> "1.500"
+        money_ar(1500.50) -> "1.500,5"
+        money_ar(1500.75) -> "1.500,75"
+    """
+    return num_ar(value)
+
+
+def date_ar(value: Union[date, datetime, None]) -> str:
+    """
+    Formatea una fecha en formato argentino: DD/MM/YYYY
+    
+    Args:
+        value: Fecha a formatear
+    
+    Returns:
+        String formateado o "-" si es None
+    
+    Examples:
+        date_ar(date(2026, 1, 12)) -> "12/01/2026"
     """
     if value is None:
         return "-"
     
     if isinstance(value, datetime):
-        # Extract date part from datetime
         value = value.date()
     
-    if isinstance(value, date):
-        return value.strftime('%d/%m/%Y')
+    if not isinstance(value, date):
+        return "-"
     
-    # If it's a string, try to parse it
-    if isinstance(value, str):
-        try:
-            # Try parsing YYYY-MM-DD format
-            parsed = datetime.strptime(value, '%Y-%m-%d').date()
-            return parsed.strftime('%d/%m/%Y')
-        except (ValueError, TypeError):
-            pass
-        
-        try:
-            # Try parsing datetime format
-            parsed = datetime.fromisoformat(value)
-            return parsed.strftime('%d/%m/%Y')
-        except (ValueError, TypeError):
-            pass
-    
-    # Fallback: return as-is or dash
-    return str(value) if value else "-"
+    return value.strftime("%d/%m/%Y")
 
 
-def datetime_ar(value, with_time=False):
+def datetime_ar(value: Union[datetime, None], with_time: bool = True) -> str:
     """
-    Format a datetime object to Argentine format.
+    Formatea un datetime en formato argentino: DD/MM/YYYY HH:MM
     
     Args:
-        value: datetime or None
-        with_time: If True, include time as DD/MM/YYYY HH:MM
-                   If False, only date as DD/MM/YYYY
-        
+        value: Datetime a formatear
+        with_time: Si True, incluye hora. Si False, solo fecha.
+    
     Returns:
-        String in format DD/MM/YYYY or DD/MM/YYYY HH:MM
+        String formateado o "-" si es None
+    
+    Examples:
+        datetime_ar(datetime(2026, 1, 12, 15, 30)) -> "12/01/2026 15:30"
+        datetime_ar(datetime(2026, 1, 12, 15, 30), with_time=False) -> "12/01/2026"
     """
     if value is None:
         return "-"
     
     if not isinstance(value, datetime):
-        # Try to convert to datetime
-        if isinstance(value, date):
-            value = datetime.combine(value, datetime.min.time())
-        elif isinstance(value, str):
-            try:
-                value = datetime.fromisoformat(value)
-            except (ValueError, TypeError):
-                return str(value) if value else "-"
-        else:
-            return str(value) if value else "-"
+        return "-"
     
     if with_time:
-        return value.strftime('%d/%m/%Y %H:%M')
+        return value.strftime("%d/%m/%Y %H:%M")
     else:
-        return value.strftime('%d/%m/%Y')
+        return value.strftime("%d/%m/%Y")
 
 
-def month_ar(value):
+def month_ar(value: Union[datetime, None]) -> str:
     """
-    Format a datetime/date to show only month and year (MM/YYYY).
-    Used for monthly balance view.
+    Formatea un periodo mensual en formato MM/YYYY
     
     Args:
-        value: datetime, date, or None
-        
+        value: Datetime representando el mes
+    
     Returns:
-        String in format MM/YYYY or "-" if None
+        String formateado o "-" si es None
+    
+    Examples:
+        month_ar(datetime(2026, 1, 1)) -> "01/2026"
     """
     if value is None:
         return "-"
     
-    if isinstance(value, datetime):
-        return value.strftime('%m/%Y')
+    if not isinstance(value, datetime):
+        return "-"
     
-    if isinstance(value, date):
-        return value.strftime('%m/%Y')
-    
-    if isinstance(value, str):
-        try:
-            # Try parsing ISO format
-            parsed = datetime.fromisoformat(value)
-            return parsed.strftime('%m/%Y')
-        except (ValueError, TypeError):
-            pass
-    
-    return str(value) if value else "-"
+    return value.strftime("%m/%Y")
 
 
-def year_ar(value):
+def year_ar(value: Union[datetime, int, None]) -> str:
     """
-    Format a datetime/date to show only year (YYYY).
-    Used for yearly balance view.
+    Formatea un año en formato YYYY
     
     Args:
-        value: datetime, date, or None
-        
+        value: Datetime o int representando el año
+    
     Returns:
-        String in format YYYY or "-" if None
+        String formateado o "-" si es None
+    
+    Examples:
+        year_ar(datetime(2026, 1, 1)) -> "2026"
+        year_ar(2026) -> "2026"
     """
     if value is None:
         return "-"
     
+    if isinstance(value, int):
+        return str(value)
+    
     if isinstance(value, datetime):
-        return value.strftime('%Y')
+        return value.strftime("%Y")
     
-    if isinstance(value, date):
-        return value.strftime('%Y')
-    
-    if isinstance(value, str):
-        try:
-            # Try parsing ISO format
-            parsed = datetime.fromisoformat(value)
-            return parsed.strftime('%Y')
-        except (ValueError, TypeError):
-            pass
-    
-    return str(value) if value else "-"
+    return "-"

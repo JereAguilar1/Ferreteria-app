@@ -153,9 +153,9 @@
                                 <tr>
                                     <td><strong>{{ product.name if product else 'Producto no encontrado' }}</strong></td>
                                     <td>{{ product.uom.symbol if product else '-' }}</td>
-                                    <td class="text-end">{{ "%.3f"|format(line.qty) }}</td>
-                                    <td class="text-end">${{ "%.4f"|format(line.unit_cost) }}</td>
-                                    <td class="text-end"><strong>${{ "%.2f"|format(line_total) }}</strong></td>
+                                    <td class="text-end">{{ line.qty|num_ar }}</td>
+                                    <td class="text-end">${{ line.unit_cost|money_ar }}</td>
+                                    <td class="text-end"><strong>${{ line_total|money_ar }}</strong></td>
                                     <td class="text-center">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"
                                                 formaction="{{ url_for('invoices.remove_draft_line', product_id=line.product_id) }}"
@@ -170,7 +170,7 @@
                                 <tr class="table-active">
                                     <td colspan="4" class="text-end"><strong>TOTAL:</strong></td>
                                     <td class="text-end">
-                                        <h5 class="mb-0">${{ "%.2f"|format(total_amount) }}</h5>
+                                        <h5 class="mb-0">${{ total_amount|money_ar }}</h5>
                                     </td>
                                     <td></td>
                                 </tr>
@@ -182,10 +182,19 @@
                         <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Cancelar
                         </a>
-                        <button type="submit" class="btn btn-primary btn-lg"
-                                onclick="return confirm('Confirmar creación de boleta?');">
-                            <i class="bi bi-check-circle"></i> Crear Boleta
+                        <button type="button" 
+                                class="btn btn-primary btn-lg"
+                                hx-get="{{ url_for('invoices.confirm_create_preview') }}"
+                                hx-target="#invoice-create-modal-container"
+                                hx-swap="innerHTML"
+                                hx-indicator="#preview-loading">
+                            <i class="bi bi-eye"></i> Revisar y Confirmar
                         </button>
+                        <div id="preview-loading" class="htmx-indicator ms-2">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Cargando...</span>
+                            </div>
+                        </div>
                     </div>
                     {% else %}
                     <div class="alert alert-info text-center">
@@ -199,5 +208,8 @@
         </div>
     </div>
 </form>
+
+<!-- Modal Container for HTMX -->
+<div id="invoice-create-modal-container"></div>
 {% endblock %}
 

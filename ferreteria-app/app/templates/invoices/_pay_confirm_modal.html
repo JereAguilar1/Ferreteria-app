@@ -9,7 +9,7 @@
             </div>
             <div class="modal-body">
                 <div class="alert alert-info small" role="alert">
-                    <i class="bi bi-info-circle"></i> Revise los detalles antes de confirmar. Esto registrará un <strong>EGRESO</strong> de <strong>${{ '%.2f'|format(invoice.total_amount) }}</strong> en el libro mayor financiero.
+                    <i class="bi bi-info-circle"></i> Revise los detalles antes de confirmar. Esto registrará un <strong>EGRESO</strong> de <strong>${{ invoice.total_amount|money_ar }}</strong> en el libro mayor financiero.
                 </div>
 
                 <!-- Invoice Summary -->
@@ -30,7 +30,7 @@
                             
                             <dt class="col-sm-4">Total a Pagar:</dt>
                             <dd class="col-sm-8">
-                                <h5 class="mb-0 text-danger">${{ '%.2f'|format(invoice.total_amount) }}</h5>
+                                <h5 class="mb-0 text-danger">${{ invoice.total_amount|money_ar }}</h5>
                             </dd>
                         </dl>
                     </div>
@@ -60,9 +60,9 @@
                                             <br>
                                             <small class="text-muted">SKU: {{ line.product.sku or '-' }}</small>
                                         </td>
-                                        <td class="text-center">{{ '%.3f'|format(line.qty) }}</td>
-                                        <td class="text-end">${{ '%.4f'|format(line.unit_cost) }}</td>
-                                        <td class="text-end"><strong>${{ '%.2f'|format(line.line_total) }}</strong></td>
+                                        <td class="text-center">{{ line.qty|num_ar }}</td>
+                                        <td class="text-end">${{ line.unit_cost|money_ar }}</td>
+                                        <td class="text-end"><strong>${{ line.line_total|money_ar }}</strong></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -70,7 +70,7 @@
                                     <tr>
                                         <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
                                         <td class="text-end">
-                                            <h5 class="mb-0 text-danger">${{ '%.2f'|format(invoice.total_amount) }}</h5>
+                                            <h5 class="mb-0 text-danger">${{ invoice.total_amount|money_ar }}</h5>
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -119,7 +119,7 @@
                 <!-- Warning -->
                 <div class="alert alert-warning mt-3 mb-0" role="alert">
                     <i class="bi bi-exclamation-triangle-fill"></i>
-                    <strong>Importante:</strong> Al confirmar, se registrará automáticamente un <strong>EGRESO</strong> de <strong>${{ '%.2f'|format(invoice.total_amount) }}</strong> en el libro mayor financiero.
+                    <strong>Importante:</strong> Al confirmar, se registrará automáticamente un <strong>EGRESO</strong> de <strong>${{ invoice.total_amount|money_ar }}</strong> en el libro mayor financiero.
                 </div>
 
             </div>

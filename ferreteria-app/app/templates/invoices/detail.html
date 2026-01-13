@@ -34,11 +34,24 @@
                     <dd class="col-sm-8">{{ invoice.invoice_date|date_ar }}</dd>
 
                     <dt class="col-sm-4">Vencimiento:</dt>
-                    <dd class="col-sm-8">{{ invoice.due_date|date_ar }}</dd>
+                    <dd class="col-sm-8">
+                        {% if invoice.due_date %}
+                        {{ invoice.due_date|date_ar }}
+                        {% if invoice.is_overdue %}
+                        <span class="badge bg-danger ms-2" title="Esta boleta está vencida">
+                            <i class="bi bi-exclamation-triangle"></i> Vencida
+                        </span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </dd>
 
                     <dt class="col-sm-4">Estado:</dt>
                     <dd class="col-sm-8">
-                        {% if invoice.status.value == 'PENDING' %}
+                        {% if invoice.is_overdue %}
+                        <span class="badge bg-danger">Caducada</span>
+                        {% elif invoice.status.value == 'PENDING' %}
                         <span class="badge bg-warning text-dark">Pendiente</span>
                         {% else %}
                         <span class="badge bg-success">Pagada</span>

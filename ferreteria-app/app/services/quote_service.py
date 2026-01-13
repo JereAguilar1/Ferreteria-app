@@ -331,6 +331,10 @@ def create_quote_from_cart(cart: dict, session, customer_name: str, customer_pho
         issued_at = datetime.now()
         valid_until = (issued_at.date() + timedelta(days=valid_days))
         
+        # Ensure payment_method is None if empty string
+        if payment_method == '':
+            payment_method = None
+        
         # Create quote with customer data (MEJORA 14)
         quote = Quote(
             quote_number=quote_number,
@@ -863,3 +867,188 @@ def convert_quote_to_sale(quote_id: int, session) -> int:
     except Exception as e:
         session.rollback()
         raise Exception(f'Error al convertir presupuesto: {str(e)}')
+
+
+def update_quote(quote_id: int, session, lines_data: list, payment_method: str = None, 
+                 valid_until: date = None, notes: str = None) -> None:
+    """
+    Update a quote with new lines and metadata (transactional).
+    
+    Rules:
+    - Only DRAFT or SENT quotes can be edited
+    - Cannot edit ACCEPTED, CANCELED, or expired quotes
+    - Prices are "frozen": existing lines keep their unit_price
+    - New lines use current product.sale_price
+    - Replaces all lines (delete old, insert new)
+    - Recalculates total_amount server-side
+    
+    Args:
+        quote_id: Quote ID to update
+        session: SQLAlchemy session
+        lines_data: List of dicts with keys:
+            - product_id: int
+            - qty: Decimal or float
+            - unit_price: Decimal or float (optional, will use old price if line existed)
+        payment_method: 'CASH' or 'TRANSFER' (optional)
+        valid_until: Date (optional)
+        notes: Text (optional)
+    
+    Raises:
+        ValueError: For business logic errors
+        Exception: For other errors
+    """
+    from sqlalchemy import and_
+    
+    try:
+        # Begin nested transaction
+        session.begin_nested()
+        
+        # Step 1: Lock quote row
+        quote = (
+            session.query(Quote)
+            .filter(Quote.id == quote_id)
+            .with_for_update()
+            .first()
+        )
+        
+        if not quote:
+            raise ValueError(f'Presupuesto con ID {quote_id} no encontrado.')
+        
+        # Step 2: Validate quote is editable
+        if quote.status not in ['DRAFT', 'SENT']:
+            raise ValueError(
+                f'El presupuesto está en estado {quote.status}. '
+                f'Solo se pueden editar presupuestos en estado DRAFT o SENT.'
+            )
+        
+        # Check if expired (calculated)
+        today = date.today()
+        if quote.valid_until and quote.valid_until < today:
+            raise ValueError(
+                f'Este presupuesto está vencido (válido hasta {quote.valid_until.strftime("%d/%m/%Y")}). '
+                f'No se puede editar.'
+            )
+        
+        # Step 3: Validate lines_data
+        if not lines_data or len(lines_data) == 0:
+            raise ValueError('El presupuesto debe tener al menos una línea.')
+        
+        # Build dict of old unit_prices and product_name_snapshots by product_id
+        old_lines_by_product = {}
+        for old_line in quote.lines:
+            old_lines_by_product[old_line.product_id] = {
+                'unit_price': old_line.unit_price,
+                'product_name_snapshot': old_line.product_name_snapshot,
+                'uom_snapshot': old_line.uom_snapshot
+            }
+        
+        # Step 4: Validate and prepare new lines
+        new_lines = []
+        product_ids_seen = set()
+        total_amount = Decimal('0.00')
+        
+        for line_data in lines_data:
+            product_id = int(line_data['product_id'])
+            qty = Decimal(str(line_data['qty']))
+            
+            # Validate qty
+            if qty <= 0:
+                raise ValueError(f'La cantidad debe ser mayor a 0 para el producto ID {product_id}.')
+            
+            # Check for duplicates
+            if product_id in product_ids_seen:
+                raise ValueError(f'El producto ID {product_id} está duplicado en las líneas.')
+            product_ids_seen.add(product_id)
+            
+            # Get product
+            product = session.query(Product).filter_by(id=product_id).first()
+            if not product:
+                raise ValueError(f'Producto con ID {product_id} no encontrado.')
+            
+            if not product.active:
+                raise ValueError(f'El producto "{product.name}" está inactivo y no puede agregarse.')
+            
+            # Determine unit_price:
+            # - If product_id existed before, use old unit_price
+            # - If new, use current product.sale_price
+            if product_id in old_lines_by_product:
+                unit_price = old_lines_by_product[product_id]['unit_price']
+                product_name_snapshot = old_lines_by_product[product_id]['product_name_snapshot']
+                uom_snapshot = old_lines_by_product[product_id].get('uom_snapshot')
+            else:
+                unit_price = Decimal(str(product.sale_price))
+                product_name_snapshot = product.name
+                uom_snapshot = product.uom.symbol if product.uom else None
+            
+            # Validate unit_price
+            if unit_price < 0:
+                raise ValueError(f'El precio unitario debe ser mayor o igual a 0.')
+            
+            # Calculate line_total
+            line_total = (qty * unit_price).quantize(Decimal('0.01'))
+            total_amount += line_total
+            
+            new_lines.append({
+                'product_id': product_id,
+                'product_name_snapshot': product_name_snapshot,
+                'uom_snapshot': uom_snapshot,
+                'qty': qty,
+                'unit_price': unit_price,
+                'line_total': line_total
+            })
+        
+        # Step 5: Delete old lines
+        session.query(QuoteLine).filter(QuoteLine.quote_id == quote_id).delete()
+        
+        # Step 6: Create new lines
+        for line_data in new_lines:
+            quote_line = QuoteLine(
+                quote_id=quote_id,
+                product_id=line_data['product_id'],
+                product_name_snapshot=line_data['product_name_snapshot'],
+                uom_snapshot=line_data['uom_snapshot'],
+                qty=line_data['qty'],
+                unit_price=line_data['unit_price'],
+                line_total=line_data['line_total']
+            )
+            session.add(quote_line)
+        
+        # Step 7: Update quote metadata
+        if payment_method is not None:
+            if payment_method not in ['CASH', 'TRANSFER', '']:
+                raise ValueError(f'Método de pago inválido: {payment_method}')
+            quote.payment_method = payment_method if payment_method else None
+        else:
+            # Keep existing payment_method if not provided
+            pass
+        
+        if valid_until is not None:
+            # Validate valid_until >= issued_at
+            if valid_until < quote.issued_at.date():
+                raise ValueError(
+                    f'La fecha de validez ({valid_until.strftime("%d/%m/%Y")}) '
+                    f'no puede ser anterior a la fecha de emisión ({quote.issued_at.date().strftime("%d/%m/%Y")}).'
+                )
+            quote.valid_until = valid_until
+        
+        if notes is not None:
+            quote.notes = notes.strip() if notes.strip() else None
+        
+        # Update total_amount
+        quote.total_amount = total_amount.quantize(Decimal('0.01'))
+        
+        # Commit transaction
+        session.commit()
+        
+    except ValueError:
+        session.rollback()
+        raise
+    
+    except IntegrityError as e:
+        session.rollback()
+        error_msg = str(e.orig)
+        raise Exception(f'Error de integridad al actualizar presupuesto: {error_msg}')
+    
+    except Exception as e:
+        session.rollback()
+        raise Exception(f'Error al actualizar presupuesto: {str(e)}')

@@ -41,13 +41,13 @@
                                     </small>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-secondary">{{ item.qty }}</span>
+                                    <span class="badge bg-secondary">{{ item.qty|num_ar }}</span>
                                 </td>
                                 <td class="text-end">
-                                    ${{ "%.2f"|format(item.unit_price) }}
+                                    ${{ item.unit_price|money_ar }}
                                 </td>
                                 <td class="text-end">
-                                    <strong>${{ "%.2f"|format(item.subtotal) }}</strong>
+                                    <strong>${{ item.subtotal|money_ar }}</strong>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -57,7 +57,7 @@
                                 <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
                                 <td class="text-end">
                                     <h5 class="mb-0 text-primary">
-                                        <strong>${{ "%.2f"|format(cart_total) }}</strong>
+                                        <strong>${{ cart_total|money_ar }}</strong>
                                     </h5>
                                 </td>
                             </tr>
@@ -92,7 +92,7 @@
                     <strong><i class="bi bi-check2-square"></i> Resumen:</strong>
                     <ul class="mb-0 mt-2">
                         <li>Total de productos: <strong>{{ cart_items|length }}</strong></li>
-                        <li>Monto total: <strong>${{ "%.2f"|format(cart_total) }}</strong></li>
+                        <li>Monto total: <strong>${{ cart_total|money_ar }}</strong></li>
                         <li>Se descontará stock automáticamente</li>
                         <li>Se registrará el ingreso en el libro contable</li>
                     </ul>

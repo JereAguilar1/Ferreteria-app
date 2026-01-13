@@ -11,12 +11,31 @@ def create_app(config_object='config.Config'):
     # Initialize database
     init_db(app)
     
-    # Register Jinja filters for date formatting (MEJORA 7)
-    from app.utils.formatters import date_ar, datetime_ar, month_ar, year_ar
+    # Register Jinja filters for formatting (MEJORA 7 + PACK)
+    from app.utils.formatters import date_ar, datetime_ar, month_ar, year_ar, num_ar, money_ar
     app.jinja_env.filters['date_ar'] = date_ar
     app.jinja_env.filters['datetime_ar'] = datetime_ar
     app.jinja_env.filters['month_ar'] = month_ar
     app.jinja_env.filters['year_ar'] = year_ar
+    app.jinja_env.filters['num_ar'] = num_ar
+    app.jinja_env.filters['money_ar'] = money_ar
+    
+    # MEJORA 21: Context processor for invoice alerts (global navbar indicator)
+    @app.context_processor
+    def inject_invoice_alerts():
+        """Inject invoice alert counts into all templates."""
+        try:
+            from app.database import get_session
+            from app.services.invoice_alerts_service import get_invoice_alert_counts
+            from datetime import date
+            
+            db_session = get_session()
+            alerts = get_invoice_alert_counts(db_session, date.today())
+            return {'invoice_alerts': alerts}
+        except Exception as e:
+            # If there's any error (e.g., DB not ready), return empty alerts
+            current_app.logger.warning(f"Error loading invoice alerts: {e}")
+            return {'invoice_alerts': {'due_tomorrow_count': 0, 'overdue_count': 0, 'total_critical': 0}}
     
     # Register blueprints
     from app.blueprints.auth import auth_bp

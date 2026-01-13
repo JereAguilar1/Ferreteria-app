@@ -32,6 +32,9 @@ def init_db(app):
     # Register teardown
     @app.teardown_appcontext
     def shutdown_session(exception=None):
+        """Close database session and rollback on error."""
+        if exception:
+            db_session.rollback()
         db_session.remove()
 
 

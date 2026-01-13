@@ -133,8 +133,16 @@ def list_products():
                              selected_stock_filter=stock_filter)
         
     except Exception as e:
+        # Rollback any failed transaction before retrying queries
+        session.rollback()
         flash(f'Error al cargar productos: {str(e)}', 'danger')
-        categories = session.query(Category).order_by(Category.name).all()
+        
+        try:
+            categories = session.query(Category).order_by(Category.name).all()
+        except Exception:
+            # If categories query also fails, use empty list
+            session.rollback()
+            categories = []
         
         is_htmx = request.headers.get('HX-Request') == 'true'
         template = 'products/_list_table.html' if is_htmx else 'products/list.html'

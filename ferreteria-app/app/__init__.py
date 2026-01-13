@@ -33,7 +33,11 @@ def create_app(config_object='config.Config'):
             alerts = get_invoice_alert_counts(db_session, date.today())
             return {'invoice_alerts': alerts}
         except Exception as e:
-            # If there's any error (e.g., DB not ready), return empty alerts
+            # If there's any error (e.g., DB not ready), rollback and return empty alerts
+            try:
+                db_session.rollback()
+            except Exception:
+                pass  # Ignore rollback errors if session is already closed
             current_app.logger.warning(f"Error loading invoice alerts: {e}")
             return {'invoice_alerts': {'due_tomorrow_count': 0, 'overdue_count': 0, 'total_critical': 0}}
     

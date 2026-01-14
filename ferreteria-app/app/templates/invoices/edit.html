@@ -98,8 +98,13 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="new_qty" class="form-label">Cantidad</label>
-                                <input type="number" class="form-control" id="new_qty"
-                                       min="0.001" step="0.001" value="1">
+                                <input type="text"
+                                       class="form-control number-input"
+                                       id="new_qty"
+                                       value="1"
+                                       inputmode="decimal"
+                                       autocomplete="off"
+                                       placeholder="1">
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -151,12 +156,12 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small">Cantidad</label>
-                                    <input type="number" 
-                                           class="form-control form-control-sm line-qty" 
+                                    <input type="text" 
+                                           class="form-control form-control-sm line-qty number-input" 
                                            name="lines[{{ loop.index0 }}][qty]"
-                                           value="{{ line.qty }}"
-                                           min="0.001" 
-                                           step="0.001"
+                                           value="{{ line.qty|num_ar }}"
+                                           inputmode="decimal"
+                                           autocomplete="off"
                                            required
                                            onchange="updateLineSubtotal(this)">
                                 </div>
@@ -256,10 +261,33 @@ document.addEventListener('DOMContentLoaded', function() {
         return decPart ? `${intFormatted},${decPart}` : intFormatted;
     }
 
+    function formatNumberAr(value) {
+        const stringValue = value === undefined || value === null ? '' : String(value);
+        const cleaned = stringValue.replace(/\./g, '').replace(/[^0-9,]/g, '');
+        const [rawInt, rawDec = ''] = cleaned.split(',');
+        const intPart = rawInt.replace(/^0+(?=\d)/, '') || '0';
+        const decPart = rawDec;
+        const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return decPart ? `${intFormatted},${decPart}` : intFormatted;
+    }
+
     function numberToMoneyAr(num) {
         const numeric = Number(num) || 0;
         const fixed = numeric.toFixed(2).replace('.', ',');
         return formatMoneyAr(fixed, true);
+    }
+
+    function numberToAr(num) {
+        const numeric = Number(num) || 0;
+        const str = numeric.toString();
+        if (str.includes('.')) {
+            const [intPart, decPart] = str.split('.');
+            const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return `${intFormatted},${decPart}`;
+        } else {
+            const intFormatted = str.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return intFormatted;
+        }
     }
 
     function arToNumber(value) {
@@ -277,12 +305,21 @@ document.addEventListener('DOMContentLoaded', function() {
         onBlur();
     }
 
+    function attachNumberInput(input) {
+        const onInput = () => { input.value = formatNumberAr(input.value); };
+        const onBlur = () => { input.value = formatNumberAr(input.value); };
+        input.addEventListener('input', onInput);
+        input.addEventListener('blur', onBlur);
+        onBlur();
+    }
+
     document.querySelectorAll('.money-input').forEach(attachMoneyInput);
+    document.querySelectorAll('.number-input').forEach(attachNumberInput);
 
     // Add new line
     addLineBtn.addEventListener('click', function() {
         const productId = newProductSelect.value;
-        const qty = parseFloat(newQtyInput.value);
+        const qtyNumber = arToNumber(newQtyInput.value);
         const unitCostNumber = arToNumber(newUnitCostInput.value);
 
         if (!productId) {
@@ -290,7 +327,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (!qty || qty <= 0) {
+        if (!qtyNumber || qtyNumber <= 0) {
             alert('La cantidad debe ser mayor a 0');
             return;
         }
@@ -314,8 +351,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        const formattedQty = formatNumberAr(newQtyInput.value);
         const formattedCost = formatMoneyAr(newUnitCostInput.value, true);
-        const subtotalFormatted = numberToMoneyAr(qty * unitCostNumber);
+        const subtotalFormatted = numberToMoneyAr(qtyNumber * unitCostNumber);
 
         // Create line HTML
         const lineHtml = `
@@ -329,12 +367,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small">Cantidad</label>
-                        <input type="number" 
-                               class="form-control form-control-sm line-qty" 
+                        <input type="text" 
+                               class="form-control form-control-sm line-qty number-input" 
                                name="lines[${lineIndex}][qty]"
-                               value="${qty}"
-                               min="0.001" 
-                               step="0.001"
+                               value="${formattedQty}"
+                               inputmode="decimal"
+                               autocomplete="off"
                                required
                                onchange="updateLineSubtotal(this)">
                     </div>
@@ -375,9 +413,15 @@ document.addEventListener('DOMContentLoaded', function() {
             attachMoneyInput(newCostInput);
         }
         
+        const newQtyInputLine = linesContainer.querySelector(`[data-line-index="${lineIndex}"] .line-qty`);
+        if (newQtyInputLine) {
+            attachNumberInput(newQtyInputLine);
+        }
+        
         // Reset form
         newProductSelect.value = '';
         newQtyInput.value = '1';
+        attachNumberInput(newQtyInput);
         newUnitCostInput.value = formatMoneyAr('0', true);
         
         // Update total
@@ -401,7 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const qtyInput = lineItem.querySelector('.line-qty');
         const costInput = lineItem.querySelector('.line-unit-cost');
         
-        const qty = parseFloat(qtyInput.value) || 0;
+        const qty = arToNumber(qtyInput.value);
         const cost = arToNumber(costInput.value);
         const subtotal = qty * cost;
         

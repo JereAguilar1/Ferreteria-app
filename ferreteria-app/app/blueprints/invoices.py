@@ -8,7 +8,7 @@ from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus
 from app.services.invoice_service import create_invoice_with_lines, update_invoice_with_lines, delete_invoice
 from app.services.payment_service import pay_invoice
 from app.services.invoice_alerts_service import is_invoice_overdue
-from app.utils.number_format import parse_ar_decimal
+from app.utils.number_format import parse_ar_decimal, parse_ar_number
 
 invoices_bp = Blueprint('invoices', __name__, url_prefix='/invoices')
 
@@ -649,7 +649,7 @@ def edit_invoice_preview(invoice_id):
             
             try:
                 product_id_int = int(product_id)
-                qty_decimal = Decimal(str(qty))
+                qty_decimal = parse_ar_number(qty)
                 unit_cost_decimal = parse_ar_decimal(unit_cost)
                 
                 if qty_decimal <= 0:
@@ -856,7 +856,7 @@ def save_invoice_edit(invoice_id):
             
             try:
                 product_id_int = int(product_id)
-                qty_decimal = Decimal(str(qty))
+                qty_decimal = parse_ar_number(qty)
                 unit_cost_decimal = parse_ar_decimal(unit_cost)
                 
                 if qty_decimal <= 0:

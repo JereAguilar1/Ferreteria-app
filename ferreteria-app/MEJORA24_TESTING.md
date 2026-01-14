@@ -33,6 +33,17 @@ Checklist de pruebas manuales para validar entrada, cálculo y visualización co
 - Previsualizar: difs de totales con 2 decimales y deltas de stock correctos.
 - Guardar: stock ajustado (altas/bajas) y totales recalculados a 2 decimales.
 
+## 5.1. Cantidades en formato AR (edición)
+- En editar boleta, modificar cantidad de una línea existente:
+  - Escribir `1.500,5` → se formatea a `1.500,5` (mantiene decimales variables).
+  - Escribir `1500` → se formatea a `1.500` (sin decimales).
+  - Escribir `1.234,567` → se formatea a `1.234,567` (permite más de 2 decimales).
+- Al agregar nueva línea desde el formulario:
+  - Ingresar cantidad `2.500,75` en formato AR.
+  - La línea se crea con cantidad formateada correctamente.
+- Verificar que los cálculos de subtotales funcionan correctamente con cantidades en formato AR.
+- Guardar boleta: las cantidades se guardan correctamente en la base de datos.
+
 ## 6. Render en UI
 - En listas, detalle, modales de confirmación/pago/eliminación: unit_cost, subtotales y totales muestran `X.XXX,YY` siempre con dos decimales.
 

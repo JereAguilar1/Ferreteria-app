@@ -107,11 +107,16 @@
                                 <label for="unit_cost" class="form-label">Costo Unitario</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
-                                    <input type="number" class="form-control" id="unit_cost" name="unit_cost"
-                                           min="0" step="1" value="0" inputmode="numeric"
-                                           title="Solo números enteros sin decimales">
+                                    <input type="text"
+                                           class="form-control money-input"
+                                           id="unit_cost"
+                                           name="unit_cost"
+                                           value="0,00"
+                                           inputmode="decimal"
+                                           autocomplete="off"
+                                           placeholder="0,00">
                                 </div>
-                                <small class="text-muted">Solo números enteros (sin decimales)</small>
+                                <small class="text-muted">Formato: 1.234,56 (2 decimales)</small>
                             </div>
                         </div>
                     </div>
@@ -149,13 +154,13 @@
                             <tbody>
                                 {% for line in draft.lines %}
                                 {% set product = products | selectattr('id', 'equalto', line.product_id) | first %}
-                                {% set line_total = line.qty * line.unit_cost %}
+                                {% set line_total = (line.qty|float) * (line.unit_cost|float) %}
                                 <tr>
                                     <td><strong>{{ product.name if product else 'Producto no encontrado' }}</strong></td>
                                     <td>{{ product.uom.symbol if product else '-' }}</td>
                                     <td class="text-end">{{ line.qty|num_ar }}</td>
-                                    <td class="text-end">${{ line.unit_cost|money_ar }}</td>
-                                    <td class="text-end"><strong>${{ line_total|money_ar }}</strong></td>
+                                    <td class="text-end">${{ line.unit_cost|money_ar_2 }}</td>
+                                    <td class="text-end"><strong>${{ line_total|money_ar_2 }}</strong></td>
                                     <td class="text-center">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"
                                                 formaction="{{ url_for('invoices.remove_draft_line', product_id=line.product_id) }}"
@@ -170,7 +175,7 @@
                                 <tr class="table-active">
                                     <td colspan="4" class="text-end"><strong>TOTAL:</strong></td>
                                     <td class="text-end">
-                                        <h5 class="mb-0">${{ total_amount|money_ar }}</h5>
+                                        <h5 class="mb-0">${{ total_amount|money_ar_2 }}</h5>
                                     </td>
                                     <td></td>
                                 </tr>
@@ -211,5 +216,40 @@
 
 <!-- Modal Container for HTMX -->
 <div id="invoice-create-modal-container"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    function formatMoneyAr(value, forceDecimals) {
+        const cleaned = value.replace(/\./g, '').replace(/[^0-9,]/g, '');
+        const [rawInt, rawDec = ''] = cleaned.split(',');
+        const intPart = rawInt.replace(/^0+(?=\d)/, '') || '0';
+        const decimalPart = rawDec.slice(0, 2);
+        const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        if (forceDecimals) {
+            const paddedDec = (decimalPart + '00').slice(0, 2);
+            return `${intFormatted},${paddedDec}`;
+        }
+        return decimalPart ? `${intFormatted},${decimalPart}` : intFormatted;
+    }
+
+    function attachMoneyInput(input) {
+        const handleInput = () => {
+            input.value = formatMoneyAr(input.value, false);
+        };
+        const handleBlur = () => {
+            input.value = formatMoneyAr(input.value, true);
+        };
+        input.addEventListener('input', handleInput);
+        input.addEventListener('blur', handleBlur);
+        handleBlur();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.money-input').forEach(attachMoneyInput);
+    });
+})();
+</script>
 {% endblock %}
 

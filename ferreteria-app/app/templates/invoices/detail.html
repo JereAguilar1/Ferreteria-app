@@ -73,12 +73,50 @@
                 <h5 class="card-title mb-0">Total</h5>
             </div>
             <div class="card-body text-center">
-                <h2 class="mb-0">${{ "%.2f"|format(invoice.total_amount) }}</h2>
+                <h2 class="mb-0">${{ invoice.total_amount|money_ar_2 }}</h2>
                 <small class="text-muted">{{ invoice.lines|length }} ítem(s)</small>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Actions Section (MEJORA 23: Edit & Delete for PENDING invoices) -->
+{% if invoice.status.value == 'PENDING' %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-tools"></i> Acciones
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" 
+                           class="btn btn-outline-primary w-100">
+                            <i class="bi bi-pencil"></i> Editar Boleta
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <button type="button" 
+                                class="btn btn-outline-danger w-100"
+                                hx-get="{{ url_for('invoices.delete_invoice_preview', invoice_id=invoice.id) }}"
+                                hx-target="#invoice-modal-container"
+                                hx-swap="innerHTML">
+                            <i class="bi bi-trash"></i> Eliminar Boleta
+                        </button>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-2">
+                    <i class="bi bi-info-circle"></i>
+                    Estas opciones solo están disponibles para boletas pendientes. Al editar o eliminar, el stock se ajustará automáticamente.
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Payment Section -->
 <div class="row">
@@ -94,7 +132,7 @@
             <div class="card-body text-center">
                 <p class="mb-3">
                     <i class="bi bi-info-circle text-muted"></i>
-                    Total a pagar: <strong class="text-danger fs-4">${{ '%.2f'|format(invoice.total_amount) }}</strong>
+                    Total a pagar: <strong class="text-danger fs-4">${{ invoice.total_amount|money_ar_2 }}</strong>
                 </p>
                 <button type="button" 
                         class="btn btn-success btn-lg"
@@ -125,7 +163,7 @@
             <p class="mb-0">
                 <strong>Fecha de pago:</strong> {{ invoice.paid_at|date_ar if invoice.paid_at else 'No disponible' }}
                 <br>
-                <strong>Monto:</strong> ${{ "%.2f"|format(invoice.total_amount) }}
+                <strong>Monto:</strong> ${{ invoice.total_amount|money_ar_2 }}
                 <br>
                 <small class="text-muted">
                     <i class="bi bi-journal-text"></i>
@@ -162,9 +200,9 @@
                                 <td><strong>{{ line.product.name }}</strong></td>
                                 <td>{{ line.product.sku or '-' }}</td>
                                 <td><span class="badge bg-info">{{ line.product.uom.symbol }}</span></td>
-                                <td class="text-end">{{ "%.3f"|format(line.qty) }}</td>
-                                <td class="text-end">${{ "%.4f"|format(line.unit_cost) }}</td>
-                                <td class="text-end"><strong>${{ "%.2f"|format(line.line_total) }}</strong></td>
+                                <td class="text-end">{{ line.qty|num_ar(3) }}</td>
+                                <td class="text-end">${{ line.unit_cost|money_ar_2 }}</td>
+                                <td class="text-end"><strong>${{ line.line_total|money_ar_2 }}</strong></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -172,7 +210,7 @@
                             <tr class="table-active">
                                 <td colspan="5" class="text-end"><strong>TOTAL:</strong></td>
                                 <td class="text-end">
-                                    <h5 class="mb-0">${{ "%.2f"|format(invoice.total_amount) }}</h5>
+                                    <h5 class="mb-0">${{ invoice.total_amount|money_ar_2 }}</h5>
                                 </td>
                             </tr>
                         </tfoot>

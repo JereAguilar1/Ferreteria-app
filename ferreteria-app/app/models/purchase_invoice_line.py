@@ -13,8 +13,8 @@ class PurchaseInvoiceLine(Base):
     invoice_id = Column(BigInteger, ForeignKey('purchase_invoice.id'), nullable=False)
     product_id = Column(BigInteger, ForeignKey('product.id'), nullable=False)
     qty = Column(Numeric(12, 3), nullable=False)
-    unit_cost = Column(Numeric(12, 4), nullable=False)
-    line_total = Column(Numeric(12, 2), nullable=False)
+    unit_cost = Column(Numeric(14, 2), nullable=False)
+    line_total = Column(Numeric(14, 2), nullable=False)
     
     # Relationships
     invoice = relationship('PurchaseInvoice', back_populates='lines')

@@ -5,9 +5,10 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import and_
 from app.database import get_session
 from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus
-from app.services.invoice_service import create_invoice_with_lines
+from app.services.invoice_service import create_invoice_with_lines, update_invoice_with_lines, delete_invoice
 from app.services.payment_service import pay_invoice
 from app.services.invoice_alerts_service import is_invoice_overdue
+from app.utils.number_format import parse_ar_decimal
 
 invoices_bp = Blueprint('invoices', __name__, url_prefix='/invoices')
 
@@ -187,7 +188,9 @@ def new_invoice():
         for line in draft['lines']:
             qty = Decimal(str(line['qty']))
             unit_cost = Decimal(str(line['unit_cost']))
-            total_amount += qty * unit_cost
+            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
+            total_amount += line_total
+        total_amount = total_amount.quantize(Decimal('0.01'))
         
         return render_template('invoices/new.html',
                              suppliers=suppliers,
@@ -229,23 +232,18 @@ def add_draft_line():
     try:
         product_id = request.form.get('product_id', type=int)
         qty = request.form.get('qty', type=float, default=1)
-        
-        # Validate unit_cost: must be integer (no decimals)
-        unit_cost_str = request.form.get('unit_cost', '').strip()
+        unit_cost_raw = request.form.get('unit_cost', '').strip()
         
         try:
-            unit_cost_decimal = Decimal(unit_cost_str)
-            
-            # Check if it's an integer (no fractional part)
-            if unit_cost_decimal % 1 != 0:
-                flash('El costo unitario debe ser un número entero (sin decimales).', 'danger')
-                return redirect(url_for('invoices.new_invoice'))
-            
-            # Convert to int for validation
-            unit_cost = int(unit_cost_decimal)
-            
-        except (ValueError, TypeError, Exception):
-            flash('El costo unitario debe ser un número entero válido.', 'danger')
+            unit_cost_decimal = parse_ar_decimal(unit_cost_raw)
+        except ValueError as e:
+            flash(str(e), 'danger')
+            return redirect(url_for('invoices.new_invoice'))
+        
+        try:
+            qty_decimal = Decimal(str(qty))
+        except Exception:
+            flash('Cantidad inválida.', 'danger')
             return redirect(url_for('invoices.new_invoice'))
         
         # Validations
@@ -253,11 +251,11 @@ def add_draft_line():
             flash('Debe seleccionar un producto', 'danger')
             return redirect(url_for('invoices.new_invoice'))
         
-        if qty <= 0:
+        if qty_decimal <= 0:
             flash('La cantidad debe ser mayor a 0', 'danger')
             return redirect(url_for('invoices.new_invoice'))
         
-        if unit_cost < 0:
+        if unit_cost_decimal < 0:
             flash('El costo unitario no puede ser negativo', 'danger')
             return redirect(url_for('invoices.new_invoice'))
         
@@ -275,14 +273,14 @@ def add_draft_line():
         
         if existing_line:
             # Update existing line
-            existing_line['qty'] = float(qty)
-            existing_line['unit_cost'] = int(unit_cost)  # Store as integer
+            existing_line['qty'] = float(qty_decimal)
+            existing_line['unit_cost'] = float(unit_cost_decimal)
         else:
             # Add new line
             draft['lines'].append({
                 'product_id': product_id,
-                'qty': float(qty),
-                'unit_cost': int(unit_cost)  # Store as integer
+                'qty': float(qty_decimal),
+                'unit_cost': float(unit_cost_decimal)
             })
         
         save_invoice_draft(draft)
@@ -364,13 +362,13 @@ def confirm_create_preview():
             
             qty = Decimal(str(line['qty']))
             unit_cost = Decimal(str(line['unit_cost']))
-            line_total = qty * unit_cost
+            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
             total_amount += line_total
             
             lines_data.append({
                 'product': product,
                 'qty': qty,
-                'unit_cost': unit_cost,
+                'unit_cost': unit_cost.quantize(Decimal('0.01')),
                 'line_total': line_total
             })
         
@@ -381,6 +379,8 @@ def confirm_create_preview():
         except ValueError:
             return '<div class="alert alert-danger">Fecha inválida en el draft.</div>'
         
+        total_amount = total_amount.quantize(Decimal('0.01'))
+
         return render_template('invoices/_create_confirm_modal.html',
                              supplier=supplier,
                              invoice_number=draft['invoice_number'],
@@ -428,12 +428,20 @@ def create_invoice():
             return redirect(url_for('invoices.new_invoice'))
         
         # Prepare payload
+        lines_payload = []
+        for line in draft['lines']:
+            lines_payload.append({
+                'product_id': line['product_id'],
+                'qty': Decimal(str(line['qty'])),
+                'unit_cost': Decimal(str(line['unit_cost']))
+            })
+
         payload = {
             'supplier_id': draft['supplier_id'],
             'invoice_number': draft['invoice_number'],
             'invoice_date': invoice_date,
             'due_date': due_date,
-            'lines': draft['lines']
+            'lines': lines_payload
         }
         
         # Call service to create invoice
@@ -521,5 +529,437 @@ def pay_invoice_route(invoice_id):
         
     except Exception as e:
         flash(f'Error al procesar pago: {str(e)}', 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+
+
+def is_invoice_editable(invoice):
+    """Check if an invoice can be edited."""
+    if invoice.status != InvoiceStatus.PENDING:
+        return False, f'Solo se pueden editar boletas PENDING. Esta boleta está en estado {invoice.status.value}.'
+    return True, None
+
+
+def is_invoice_deletable(invoice):
+    """Check if an invoice can be deleted."""
+    if invoice.status != InvoiceStatus.PENDING:
+        return False, f'Solo se pueden eliminar boletas PENDING. Esta boleta está en estado {invoice.status.value}. Si está PAID, tiene un asiento contable registrado.'
+    return True, None
+
+
+@invoices_bp.route('/<int:invoice_id>/edit', methods=['GET'])
+def edit_invoice(invoice_id):
+    """Show form to edit an invoice (PENDING only)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            flash('Boleta no encontrada.', 'danger')
+            return redirect(url_for('invoices.list_invoices'))
+        
+        # Validate invoice is editable
+        can_edit, error_msg = is_invoice_editable(invoice)
+        if not can_edit:
+            flash(error_msg, 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Get all active products for the product selector
+        products = db_session.query(Product).filter_by(active=True).order_by(Product.name).all()
+        
+        # Get all suppliers
+        suppliers = db_session.query(Supplier).order_by(Supplier.name).all()
+        
+        return render_template('invoices/edit.html', 
+                             invoice=invoice, 
+                             products=products,
+                             suppliers=suppliers)
+        
+    except Exception as e:
+        flash(f'Error al cargar formulario de edición: {str(e)}', 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+
+
+@invoices_bp.route('/<int:invoice_id>/edit/preview', methods=['POST'])
+def edit_invoice_preview(invoice_id):
+    """Preview invoice changes before confirmation (HTMX modal)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            return '<div class="alert alert-danger">Boleta no encontrada.</div>'
+        
+        # Validate invoice is editable
+        can_edit, error_msg = is_invoice_editable(invoice)
+        if not can_edit:
+            return f'<div class="alert alert-danger">{error_msg}</div>'
+        
+        # Parse form data
+        supplier_id = request.form.get('supplier_id')
+        if not supplier_id:
+            return '<div class="alert alert-danger">El proveedor es requerido.</div>'
+        
+        supplier_id = int(supplier_id)
+        supplier = db_session.query(Supplier).filter_by(id=supplier_id).first()
+        if not supplier:
+            return '<div class="alert alert-danger">Proveedor no encontrado.</div>'
+        
+        invoice_number = request.form.get('invoice_number', '').strip()
+        if not invoice_number:
+            return '<div class="alert alert-danger">El número de boleta es requerido.</div>'
+        
+        invoice_date_str = request.form.get('invoice_date', '').strip()
+        if not invoice_date_str:
+            return '<div class="alert alert-danger">La fecha de boleta es requerida.</div>'
+        
+        try:
+            invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return '<div class="alert alert-danger">Fecha de boleta inválida.</div>'
+        
+        due_date_str = request.form.get('due_date', '').strip()
+        due_date = None
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return '<div class="alert alert-danger">Fecha de vencimiento inválida.</div>'
+        
+        # Parse lines from form
+        lines_data = []
+        line_index = 0
+        
+        while True:
+            product_id_key = f'lines[{line_index}][product_id]'
+            qty_key = f'lines[{line_index}][qty]'
+            unit_cost_key = f'lines[{line_index}][unit_cost]'
+            
+            if product_id_key not in request.form:
+                break
+            
+            product_id = request.form.get(product_id_key, '').strip()
+            qty = request.form.get(qty_key, '').strip()
+            unit_cost = request.form.get(unit_cost_key, '').strip()
+            
+            if not product_id or not qty or not unit_cost:
+                line_index += 1
+                continue
+            
+            try:
+                product_id_int = int(product_id)
+                qty_decimal = Decimal(str(qty))
+                unit_cost_decimal = parse_ar_decimal(unit_cost)
+                
+                if qty_decimal <= 0:
+                    return f'<div class="alert alert-danger">La cantidad debe ser mayor a 0 en la línea {line_index + 1}.</div>'
+                
+                if unit_cost_decimal < 0:
+                    return f'<div class="alert alert-danger">El costo unitario no puede ser negativo en la línea {line_index + 1}.</div>'
+                
+                # Get product
+                product = db_session.query(Product).filter_by(id=product_id_int).first()
+                if not product:
+                    return f'<div class="alert alert-danger">Producto con ID {product_id_int} no encontrado.</div>'
+                
+                if not product.active:
+                    return f'<div class="alert alert-danger">El producto "{product.name}" está inactivo.</div>'
+                
+                lines_data.append({
+                    'product_id': product_id_int,
+                    'qty': qty_decimal,
+                    'unit_cost': unit_cost_decimal,
+                    'product': product
+                })
+                
+            except (ValueError, TypeError) as e:
+                return f'<div class="alert alert-danger">Error en línea {line_index + 1}: {str(e)}</div>'
+            
+            line_index += 1
+        
+        if not lines_data:
+            return '<div class="alert alert-danger">Debe agregar al menos una línea.</div>'
+        
+        # Calculate changes
+        old_lines_by_product = {line.product_id: line for line in invoice.lines}
+        new_lines_by_product = {line['product_id']: line for line in lines_data}
+        
+        # Calculate old and new totals
+        old_total = invoice.total_amount
+        new_total = Decimal('0.00')
+        
+        changes = {
+            'added': [],
+            'removed': [],
+            'modified': [],
+            'stock_deltas': []
+        }
+        
+        # Check for removed lines
+        for old_line in invoice.lines:
+            if old_line.product_id not in new_lines_by_product:
+                changes['removed'].append({
+                    'product': old_line.product.name,
+                    'qty': old_line.qty,
+                    'unit_cost': old_line.unit_cost,
+                    'line_total': old_line.line_total
+                })
+                # Stock delta: negative (removing this line removes stock)
+                changes['stock_deltas'].append({
+                    'product': old_line.product.name,
+                    'delta': -old_line.qty,
+                    'uom': old_line.product.uom.symbol if old_line.product.uom else ''
+                })
+        
+        # Check for added/modified lines
+        for new_line_data in lines_data:
+            product_id = new_line_data['product_id']
+            new_qty = new_line_data['qty']
+            new_unit_cost = new_line_data['unit_cost']
+            product = new_line_data['product']
+            
+            line_total = (new_qty * new_unit_cost).quantize(Decimal('0.01'))
+            new_total += line_total
+            
+            if product_id not in old_lines_by_product:
+                # Added line
+                changes['added'].append({
+                    'product': product.name,
+                    'qty': new_qty,
+                    'unit_cost': new_unit_cost,
+                    'line_total': line_total
+                })
+                # Stock delta: positive (adding this line adds stock)
+                changes['stock_deltas'].append({
+                    'product': product.name,
+                    'delta': new_qty,
+                    'uom': product.uom.symbol if product.uom else ''
+                })
+            else:
+                # Check if modified
+                old_line = old_lines_by_product[product_id]
+                if old_line.qty != new_qty or old_line.unit_cost != new_unit_cost:
+                    changes['modified'].append({
+                        'product': product.name,
+                        'old_qty': old_line.qty,
+                        'new_qty': new_qty,
+                        'old_unit_cost': old_line.unit_cost,
+                        'new_unit_cost': new_unit_cost,
+                        'old_line_total': old_line.line_total,
+                        'new_line_total': line_total
+                    })
+                    # Stock delta: difference in qty
+                    delta = new_qty - old_line.qty
+                    if delta != 0:
+                        changes['stock_deltas'].append({
+                            'product': product.name,
+                            'delta': delta,
+                            'uom': product.uom.symbol if product.uom else ''
+                        })
+        
+        new_total = new_total.quantize(Decimal('0.01'))
+
+        # Check if there are any changes
+        has_changes = (
+            len(changes['added']) > 0 or
+            len(changes['removed']) > 0 or
+            len(changes['modified']) > 0 or
+            supplier_id != invoice.supplier_id or
+            invoice_number != invoice.invoice_number or
+            invoice_date != invoice.invoice_date or
+            due_date != invoice.due_date or
+            old_total != new_total
+        )
+        
+        if not has_changes:
+            return '<div class="alert alert-info">No hay cambios para aplicar.</div>'
+        
+        return render_template('invoices/_edit_confirm_modal.html',
+                             invoice=invoice,
+                             old_total=old_total,
+                             new_total=new_total,
+                             changes=changes,
+                             supplier=supplier,
+                             invoice_number=invoice_number,
+                             invoice_date=invoice_date,
+                             due_date=due_date)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating edit preview for invoice {invoice_id}: {e}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return f'<div class="alert alert-danger">Error al generar vista previa: {str(e)}</div>'
+
+
+@invoices_bp.route('/<int:invoice_id>/edit', methods=['POST'])
+def save_invoice_edit(invoice_id):
+    """Save invoice changes (transactional)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            flash('Boleta no encontrada.', 'danger')
+            return redirect(url_for('invoices.list_invoices'))
+        
+        # Validate invoice is editable
+        can_edit, error_msg = is_invoice_editable(invoice)
+        if not can_edit:
+            flash(error_msg, 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Parse form data
+        supplier_id = request.form.get('supplier_id')
+        invoice_number = request.form.get('invoice_number', '').strip()
+        invoice_date_str = request.form.get('invoice_date', '').strip()
+        due_date_str = request.form.get('due_date', '').strip()
+        
+        if not supplier_id or not invoice_number or not invoice_date_str:
+            flash('Proveedor, número de boleta y fecha son requeridos.', 'danger')
+            return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+        
+        try:
+            invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Fecha de boleta inválida.', 'danger')
+            return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+        
+        due_date = None
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Fecha de vencimiento inválida.', 'danger')
+                return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+        
+        # Parse lines from form
+        lines_data = []
+        line_index = 0
+        
+        while True:
+            product_id_key = f'lines[{line_index}][product_id]'
+            qty_key = f'lines[{line_index}][qty]'
+            unit_cost_key = f'lines[{line_index}][unit_cost]'
+            
+            if product_id_key not in request.form:
+                break
+            
+            product_id = request.form.get(product_id_key, '').strip()
+            qty = request.form.get(qty_key, '').strip()
+            unit_cost = request.form.get(unit_cost_key, '').strip()
+            
+            if not product_id or not qty or not unit_cost:
+                line_index += 1
+                continue
+            
+            try:
+                product_id_int = int(product_id)
+                qty_decimal = Decimal(str(qty))
+                unit_cost_decimal = parse_ar_decimal(unit_cost)
+                
+                if qty_decimal <= 0:
+                    flash(f'La cantidad debe ser mayor a 0 en la línea {line_index + 1}.', 'danger')
+                    return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+                
+                lines_data.append({
+                    'product_id': product_id_int,
+                    'qty': qty_decimal,
+                    'unit_cost': unit_cost_decimal
+                })
+                
+            except (ValueError, TypeError) as e:
+                flash(f'Error en línea {line_index + 1}: {str(e)}', 'danger')
+                return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+            
+            line_index += 1
+        
+        if not lines_data:
+            flash('Debe agregar al menos una línea.', 'danger')
+            return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+        
+        # Build payload
+        payload = {
+            'supplier_id': int(supplier_id),
+            'invoice_number': invoice_number,
+            'invoice_date': invoice_date,
+            'due_date': due_date,
+            'lines': lines_data
+        }
+        
+        # Call service to update invoice
+        update_invoice_with_lines(invoice_id, payload, db_session)
+        
+        flash('Boleta actualizada exitosamente. El stock se ha ajustado automáticamente.', 'success')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+        
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error al actualizar boleta: {str(e)}', 'danger')
+        return redirect(url_for('invoices.edit_invoice', invoice_id=invoice_id))
+
+
+@invoices_bp.route('/<int:invoice_id>/delete/preview', methods=['GET'])
+def delete_invoice_preview(invoice_id):
+    """Preview invoice deletion (HTMX modal)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            return '<div class="alert alert-danger">Boleta no encontrada.</div>'
+        
+        # Validate invoice can be deleted
+        can_delete, error_msg = is_invoice_deletable(invoice)
+        if not can_delete:
+            return f'<div class="alert alert-danger">{error_msg}</div>'
+        
+        return render_template('invoices/_delete_confirm_modal.html', invoice=invoice)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating delete preview for invoice {invoice_id}: {e}")
+        return f'<div class="alert alert-danger">Error: {str(e)}</div>'
+
+
+@invoices_bp.route('/<int:invoice_id>/delete', methods=['POST'])
+def delete_invoice_route(invoice_id):
+    """Delete invoice and revert stock (PENDING only)."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            flash('Boleta no encontrada.', 'danger')
+            return redirect(url_for('invoices.list_invoices'))
+        
+        # Validate invoice can be deleted
+        can_delete, error_msg = is_invoice_deletable(invoice)
+        if not can_delete:
+            flash(error_msg, 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Store invoice_number for flash message
+        invoice_number = invoice.invoice_number
+        
+        # Call service to delete invoice
+        delete_invoice(invoice_id, db_session)
+        
+        flash(f'Boleta #{invoice_number} eliminada exitosamente. El stock se ha revertido automáticamente.', 'success')
+        return redirect(url_for('invoices.list_invoices'))
+        
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error al eliminar boleta: {str(e)}', 'danger')
         return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
 

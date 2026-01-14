@@ -12,13 +12,14 @@ def create_app(config_object='config.Config'):
     init_db(app)
     
     # Register Jinja filters for formatting (MEJORA 7 + PACK)
-    from app.utils.formatters import date_ar, datetime_ar, month_ar, year_ar, num_ar, money_ar
+    from app.utils.formatters import date_ar, datetime_ar, month_ar, year_ar, num_ar, money_ar, money_ar_2
     app.jinja_env.filters['date_ar'] = date_ar
     app.jinja_env.filters['datetime_ar'] = datetime_ar
     app.jinja_env.filters['month_ar'] = month_ar
     app.jinja_env.filters['year_ar'] = year_ar
     app.jinja_env.filters['num_ar'] = num_ar
     app.jinja_env.filters['money_ar'] = money_ar
+    app.jinja_env.filters['money_ar_2'] = money_ar_2
     
     # MEJORA 21: Context processor for invoice alerts (global navbar indicator)
     @app.context_processor

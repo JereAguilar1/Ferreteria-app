@@ -35,7 +35,7 @@
                             
                             <dt class="col-sm-4">Total:</dt>
                             <dd class="col-sm-8">
-                                <h5 class="mb-0 text-primary">${{ total_amount|money_ar }}</h5>
+                                <h5 class="mb-0 text-primary">${{ total_amount|money_ar_2 }}</h5>
                             </dd>
                         </dl>
                     </div>
@@ -69,8 +69,8 @@
                                             </small>
                                         </td>
                                         <td class="text-center">{{ line.qty|num_ar }}</td>
-                                        <td class="text-end">${{ line.unit_cost|money_ar }}</td>
-                                        <td class="text-end"><strong>${{ line.line_total|money_ar }}</strong></td>
+                                        <td class="text-end">${{ line.unit_cost|money_ar_2 }}</td>
+                                        <td class="text-end"><strong>${{ line.line_total|money_ar_2 }}</strong></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -78,7 +78,7 @@
                                     <tr>
                                         <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
                                         <td class="text-end">
-                                            <h5 class="mb-0 text-primary">${{ total_amount|money_ar }}</h5>
+                                            <h5 class="mb-0 text-primary">${{ total_amount|money_ar_2 }}</h5>
                                         </td>
                                     </tr>
                                 </tfoot>

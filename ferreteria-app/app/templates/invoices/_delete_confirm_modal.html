@@ -1,0 +1,92 @@
+<div class="modal fade" id="confirmDeleteInvoiceModal" tabindex="-1" aria-labelledby="confirmDeleteInvoiceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmDeleteInvoiceModalLabel">
+                    <i class="bi bi-trash"></i> Confirmar Eliminación de Boleta
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>¡Atención!</strong> Esta acción es irreversible.
+                </div>
+
+                <h6>¿Está seguro de eliminar esta boleta?</h6>
+                
+                <div class="card mt-3 mb-3">
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">Proveedor:</dt>
+                            <dd class="col-sm-8"><strong>{{ invoice.supplier.name }}</strong></dd>
+                            
+                            <dt class="col-sm-4">Número:</dt>
+                            <dd class="col-sm-8"><strong>{{ invoice.invoice_number }}</strong></dd>
+                            
+                            <dt class="col-sm-4">Fecha:</dt>
+                            <dd class="col-sm-8">{{ invoice.invoice_date|date_ar }}</dd>
+                            
+                            <dt class="col-sm-4">Total:</dt>
+                            <dd class="col-sm-8"><strong class="text-danger">${{ invoice.total_amount|money_ar_2 }}</strong></dd>
+                            
+                            <dt class="col-sm-4">Ítems:</dt>
+                            <dd class="col-sm-8">{{ invoice.lines|length }} producto(s)</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-box-seam"></i>
+                    <strong>Impacto en Stock:</strong> Se revertirá el stock ingresado por esta boleta. 
+                    Los siguientes productos verán reducido su stock:
+                    <ul class="mt-2 mb-0">
+                        {% for line in invoice.lines %}
+                        <li>
+                            <strong>{{ line.product.name }}:</strong> 
+                            <span class="text-danger">-{{ line.qty|num_ar }} {{ line.product.uom.symbol }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                
+                <form method="POST" action="{{ url_for('invoices.delete_invoice_route', invoice_id=invoice.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" id="confirmDeleteBtn">
+                        <i class="bi bi-trash"></i> Eliminar Boleta
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-open the modal when it's inserted into the DOM
+(function() {
+    const modalElement = document.getElementById('confirmDeleteInvoiceModal');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+        
+        // Disable button on submit to prevent double-click
+        const btn = document.getElementById('confirmDeleteBtn');
+        if (btn) {
+            btn.closest('form').addEventListener('submit', function() {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Eliminando...';
+            });
+        }
+        
+        // Optional: Remove modal from DOM after it's hidden
+        modalElement.addEventListener('hidden.bs.modal', function () {
+            modalElement.remove();
+        });
+    }
+})();
+</script>

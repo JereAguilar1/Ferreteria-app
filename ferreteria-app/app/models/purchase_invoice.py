@@ -22,7 +22,7 @@ class PurchaseInvoice(Base):
     invoice_number = Column(String, nullable=False)
     invoice_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=True)
-    total_amount = Column(Numeric(12, 2), nullable=False)
+    total_amount = Column(Numeric(14, 2), nullable=False)
     status = Column(Enum(InvoiceStatus, name='invoice_status'), nullable=False, default=InvoiceStatus.PENDING)
     paid_at = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

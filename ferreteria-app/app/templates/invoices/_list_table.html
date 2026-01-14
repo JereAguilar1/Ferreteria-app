@@ -34,7 +34,7 @@
                             <span class="text-muted">-</span>
                             {% endif %}
                         </td>
-                        <td class="text-end"><strong>${{ invoice.total_amount|money_ar }}</strong></td>
+                        <td class="text-end"><strong>${{ invoice.total_amount|money_ar_2 }}</strong></td>
                         <td class="text-center">
                             {% if invoice.is_overdue %}
                             <span class="badge bg-danger">Caducada</span>
@@ -51,6 +51,11 @@
                                 <i class="bi bi-eye"></i>
                             </a>
                             {% if invoice.status.value == 'PENDING' %}
+                            <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" 
+                               class="btn btn-sm btn-outline-secondary"
+                               title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </a>
                             <button type="button"
                                     class="btn btn-sm btn-warning"
                                     title="Pagar"
@@ -58,6 +63,14 @@
                                     hx-target="#modal-container"
                                     hx-swap="innerHTML">
                                 <i class="bi bi-credit-card"></i>
+                            </button>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    title="Eliminar"
+                                    hx-get="{{ url_for('invoices.delete_invoice_preview', invoice_id=invoice.id) }}"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML">
+                                <i class="bi bi-trash"></i>
                             </button>
                             {% endif %}
                         </td>

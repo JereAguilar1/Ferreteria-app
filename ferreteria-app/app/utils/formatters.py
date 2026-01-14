@@ -103,6 +103,37 @@ def money_ar(value: Union[int, float, Decimal, str, None]) -> str:
     return num_ar(value)
 
 
+def money_ar_2(value: Union[int, float, Decimal, str, None]) -> str:
+    """
+    Formatea un monto monetario en estilo argentino con exactamente 2 decimales.
+    Siempre muestra dos decimales y usa punto para miles y coma para decimales.
+
+    Args:
+        value: Monto a formatear
+
+    Returns:
+        String formateado (ej: 1.500,00). Devuelve "-" si es inválido.
+    """
+    if value is None or value == "":
+        return "-"
+
+    try:
+        normalized = str(value).replace(",", ".")
+        num = Decimal(normalized).quantize(Decimal('0.01'))
+    except (InvalidOperation, ValueError, TypeError):
+        return "-"
+
+    sign = "-" if num < 0 else ""
+    num = abs(num)
+
+    integer_part, decimal_part = f"{num:.2f}".split(".")
+    reversed_int = integer_part[::-1]
+    groups = [reversed_int[i:i+3] for i in range(0, len(reversed_int), 3)]
+    integer_formatted = '.'.join(groups)[::-1]
+
+    return f"{sign}{integer_formatted},{decimal_part}"
+
+
 def date_ar(value: Union[date, datetime, None]) -> str:
     """
     Formatea una fecha en formato argentino: DD/MM/YYYY

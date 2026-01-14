@@ -11,6 +11,8 @@ cd C:\jere\Ferreteria\Ferreteria-db
 docker ps
 ```
 
+hola hola hola
+
 Si no está corriendo:
 
 ```powershell

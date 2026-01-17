@@ -6,6 +6,8 @@ from werkzeug.utils import secure_filename
 import os
 from app.database import get_session
 from app.models import Product, ProductStock, UOM, Category
+from app.services.stock_service import adjust_stock_to, get_recent_manual_adjustments
+from decimal import Decimal
 
 catalog_bp = Blueprint('catalog', __name__, url_prefix='/products')
 
@@ -195,6 +197,7 @@ def create_product():
         uom_id = request.form.get('uom_id', '').strip()
         sale_price = request.form.get('sale_price', '0').strip()
         min_stock_qty = request.form.get('min_stock_qty', '0').strip()  # MEJORA 11
+        initial_stock = request.form.get('initial_stock', '').strip()  # MEJORA 24: Stock inicial
         active = request.form.get('active') == 'on'
         
         # Server-side validations
@@ -226,6 +229,17 @@ def create_product():
         except ValueError:
             errors.append('El stock mínimo debe ser un número válido')
             min_stock_qty_decimal = 0
+        
+        # MEJORA 24: Validate initial_stock
+        initial_stock_decimal = None
+        if initial_stock:
+            try:
+                initial_stock_decimal = Decimal(initial_stock)
+                if initial_stock_decimal < 0:
+                    errors.append('El stock inicial debe ser mayor o igual a 0')
+            except (ValueError, TypeError):
+                errors.append('El stock inicial debe ser un número válido')
+                initial_stock_decimal = None
         
         if errors:
             for error in errors:
@@ -260,9 +274,24 @@ def create_product():
         session.add(product)
         session.commit()
         
-        # Note: product_stock is created automatically by database trigger
+        # Note: product_stock is created automatically by database trigger (with qty=0)
         
-        flash(f'Producto "{product.name}" creado exitosamente', 'success')
+        # MEJORA 24: Set initial stock if provided
+        if initial_stock_decimal is not None and initial_stock_decimal > 0:
+            try:
+                adjust_stock_to(
+                    session=session,
+                    product_id=product.id,
+                    new_qty=initial_stock_decimal,
+                    notes='Stock inicial'
+                )
+                flash(f'Producto "{product.name}" creado exitosamente con stock inicial de {initial_stock_decimal}', 'success')
+            except Exception as e:
+                # If stock adjustment fails, product was still created
+                flash(f'Producto "{product.name}" creado, pero error al setear stock inicial: {str(e)}', 'warning')
+        else:
+            flash(f'Producto "{product.name}" creado exitosamente', 'success')
+        
         return redirect(url_for('catalog.list_products'))
         
     except IntegrityError as e:
@@ -308,10 +337,14 @@ def edit_product(product_id):
         uoms = session.query(UOM).order_by(UOM.name).all()
         categories = session.query(Category).order_by(Category.name).all()
         
+        # MEJORA 24: Get recent manual adjustments for audit
+        recent_adjustments = get_recent_manual_adjustments(session, product_id, limit=5)
+        
         return render_template('products/form.html',
                              product=product,
                              uoms=uoms,
                              categories=categories,
+                             recent_adjustments=recent_adjustments,
                              action='edit')
         
     except Exception as e:
@@ -544,4 +577,71 @@ def delete_product(product_id):
         current_app.logger.error(f"Error deleting product {product_id}: {e}")
         flash(f'Error al eliminar producto: {str(e)}', 'danger')
         return redirect(url_for('catalog.list_products'))
+
+
+@catalog_bp.route('/<int:product_id>/adjust-stock', methods=['POST'])
+def adjust_product_stock(product_id):
+    """
+    Manually adjust product stock (MEJORA 24).
+    
+    This creates a stock_move of type ADJUST.
+    IMPORTANT: This does NOT affect finance_ledger.
+    """
+    session = get_session()
+    
+    try:
+        product = session.query(Product).filter_by(id=product_id).first()
+        
+        if not product:
+            flash('Producto no encontrado', 'danger')
+            return redirect(url_for('catalog.list_products'))
+        
+        # Get new_stock from form
+        new_stock_str = request.form.get('new_stock', '').strip()
+        
+        if not new_stock_str:
+            flash('Debe ingresar un valor de stock', 'danger')
+            return redirect(url_for('catalog.edit_product', product_id=product_id))
+        
+        try:
+            new_stock = Decimal(new_stock_str)
+        except (ValueError, TypeError):
+            flash('El stock debe ser un número válido', 'danger')
+            return redirect(url_for('catalog.edit_product', product_id=product_id))
+        
+        if new_stock < 0:
+            flash('El stock no puede ser negativo', 'danger')
+            return redirect(url_for('catalog.edit_product', product_id=product_id))
+        
+        # Get current stock for flash message
+        current_stock = product.on_hand_qty
+        
+        # Call service to adjust stock
+        adjust_stock_to(
+            session=session,
+            product_id=product_id,
+            new_qty=new_stock,
+            notes=f'Ajuste manual desde edición de producto'
+        )
+        
+        # Flash message with delta info
+        delta = new_stock - current_stock
+        if delta == 0:
+            flash(f'El stock ya estaba en {new_stock}. No se realizó ningún ajuste.', 'info')
+        elif delta > 0:
+            flash(f'Stock ajustado exitosamente: {current_stock} → {new_stock} (+{delta})', 'success')
+        else:
+            flash(f'Stock ajustado exitosamente: {current_stock} → {new_stock} ({delta})', 'success')
+        
+        return redirect(url_for('catalog.edit_product', product_id=product_id))
+        
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('catalog.edit_product', product_id=product_id))
+        
+    except Exception as e:
+        session.rollback()
+        current_app.logger.error(f"Error adjusting stock for product {product_id}: {e}")
+        flash(f'Error al ajustar stock: {str(e)}', 'danger')
+        return redirect(url_for('catalog.edit_product', product_id=product_id))
 

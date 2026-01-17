@@ -103,6 +103,7 @@ def create_invoice_with_lines(payload: dict, session) -> int:
                 unit_cost = raw_unit_cost.quantize(Decimal('0.01'))
                 if raw_unit_cost != unit_cost:
                     raise ValueError(f'El costo unitario debe tener exactamente 2 decimales para "{product.name}"')
+                    
             except (TypeError, ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Costo unitario inválido para "{product.name}"')
             

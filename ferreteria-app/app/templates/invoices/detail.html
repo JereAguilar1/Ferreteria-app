@@ -68,13 +68,40 @@
     </div>
 
     <div class="col-md-6">
+        <!-- MEJORA B: Balance Card (Total, Pagado, Saldo) -->
         <div class="card mb-3">
-            <div class="card-header bg-success text-white">
-                <h5 class="card-title mb-0">Total</h5>
+            <div class="card-header {% if balance_info.is_fully_paid %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-calculator"></i> Balance
+                </h5>
             </div>
-            <div class="card-body text-center">
-                <h2 class="mb-0">${{ invoice.total_amount|money_ar_2 }}</h2>
-                <small class="text-muted">{{ invoice.lines|length }} ítem(s)</small>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Total:</dt>
+                    <dd class="col-sm-7 text-end">
+                        <h4 class="mb-0">${{ balance_info.total_amount|money_ar_2 }}</h4>
+                    </dd>
+                    
+                    <dt class="col-sm-5">Pagado:</dt>
+                    <dd class="col-sm-7 text-end">
+                        <span class="{% if balance_info.total_paid > 0 %}text-success{% else %}text-muted{% endif %}">
+                            ${{ balance_info.total_paid|money_ar_2 }}
+                        </span>
+                    </dd>
+                    
+                    <dt class="col-sm-5">Saldo:</dt>
+                    <dd class="col-sm-7 text-end">
+                        <h4 class="mb-0 {% if balance_info.balance == 0 %}text-success{% else %}text-danger{% endif %}">
+                            ${{ balance_info.balance|money_ar_2 }}
+                        </h4>
+                    </dd>
+                </dl>
+                
+                {% if balance_info.is_fully_paid %}
+                <div class="alert alert-success mt-3 mb-0 small">
+                    <i class="bi bi-check-circle-fill"></i> Boleta pagada completamente
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -118,60 +145,176 @@
 </div>
 {% endif %}
 
-<!-- Payment Section -->
+<!-- MEJORA B: Payments Section (Partial Payments) -->
 <div class="row">
-    <div class="col-12">
-        {% if invoice.status.value == 'PENDING' %}
-        <!-- Payment Button for PENDING invoices (MEJORA 19: Opens modal) -->
-        <div class="card border-warning mb-3">
-            <div class="card-header bg-warning text-dark">
+    <!-- Payment History -->
+    <div class="col-md-7">
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
                 <h5 class="card-title mb-0">
-                    <i class="bi bi-credit-card"></i> Registrar Pago
+                    <i class="bi bi-clock-history"></i> Historial de Pagos
                 </h5>
             </div>
-            <div class="card-body text-center">
-                <p class="mb-3">
-                    <i class="bi bi-info-circle text-muted"></i>
-                    Total a pagar: <strong class="text-danger fs-4">${{ invoice.total_amount|money_ar_2 }}</strong>
-                </p>
-                <button type="button" 
-                        class="btn btn-success btn-lg"
-                        hx-get="{{ url_for('invoices.pay_invoice_preview', invoice_id=invoice.id) }}"
-                        hx-target="#invoice-modal-container"
-                        hx-swap="innerHTML"
-                        hx-indicator="#pay-loading">
-                    <i class="bi bi-check-circle"></i> Pagar Boleta
-                </button>
-                <div id="pay-loading" class="htmx-indicator mt-2">
-                    <div class="spinner-border text-success" role="status">
-                        <span class="visually-hidden">Cargando...</span>
-                    </div>
+            <div class="card-body">
+                {% if invoice.payments and invoice.payments|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Fecha</th>
+                                <th class="text-end">Monto</th>
+                                <th>Notas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in invoice.payments %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ payment.paid_at|date_ar }}</td>
+                                <td class="text-end">
+                                    <strong class="text-success">${{ payment.amount|money_ar_2 }}</strong>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ payment.notes or '-' }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-active">
+                                <td colspan="2"><strong>Total Pagado:</strong></td>
+                                <td class="text-end">
+                                    <strong class="text-success">${{ balance_info.total_paid|money_ar_2 }}</strong>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
-                <small class="d-block mt-3 text-muted">
+                {% else %}
+                <div class="alert alert-info mb-0">
                     <i class="bi bi-info-circle"></i>
-                    Se abrirá una ventana de confirmación con el detalle completo
-                </small>
+                    No se han registrado pagos aún
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Payment Form & Due Date -->
+    <div class="col-md-5">
+        {% if not balance_info.is_fully_paid %}
+        <!-- Add Partial Payment Form -->
+        <div class="card mb-3 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-plus-circle"></i> Registrar Pago
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('invoices.add_payment', invoice_id=invoice.id) }}">
+                    <div class="mb-3">
+                        <label for="paid_at" class="form-label">
+                            Fecha de Pago <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="paid_at" 
+                               name="paid_at" 
+                               value="{{ today }}"
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">
+                            Monto <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="amount" 
+                                   name="amount" 
+                                   step="0.01"
+                                   min="0.01"
+                                   max="{{ balance_info.balance }}"
+                                   value="{{ balance_info.balance }}"
+                                   required>
+                        </div>
+                        <small class="text-muted">
+                            Saldo pendiente: ${{ balance_info.balance|money_ar_2 }}
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="payment_method" class="form-label">Método de Pago</label>
+                        <select class="form-select" id="payment_method" name="payment_method">
+                            <option value="CASH">Efectivo</option>
+                            <option value="TRANSFER">Transferencia</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notas (opcional)</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="notes" 
+                               name="notes"
+                               placeholder="Ej: Adelanto, Pago parcial 1/3">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check-circle"></i> Registrar Pago
+                    </button>
+                </form>
             </div>
         </div>
         {% else %}
-        <!-- Payment Info for PAID invoices -->
-        <div class="alert alert-success" role="alert">
+        <!-- Fully Paid Message -->
+        <div class="alert alert-success">
             <h5 class="alert-heading">
-                <i class="bi bi-check-circle-fill"></i> Boleta Pagada
+                <i class="bi bi-check-circle-fill"></i> Boleta Pagada Completamente
             </h5>
             <hr>
             <p class="mb-0">
-                <strong>Fecha de pago:</strong> {{ invoice.paid_at|date_ar if invoice.paid_at else 'No disponible' }}
-                <br>
-                <strong>Monto:</strong> ${{ invoice.total_amount|money_ar_2 }}
+                Esta boleta ha sido pagada en su totalidad.
                 <br>
                 <small class="text-muted">
-                    <i class="bi bi-journal-text"></i>
-                    El egreso fue registrado en el libro mayor financiero.
+                    Total de pagos: {{ invoice.payments|length }}
                 </small>
             </p>
         </div>
         {% endif %}
+        
+        <!-- Update Due Date Form 
+        <div class="card border-secondary">
+            <div class="card-header bg-secondary text-white">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-calendar-event"></i> Vencimiento
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('invoices.update_due_date', invoice_id=invoice.id) }}">
+                    <div class="mb-2">
+                        <label for="due_date" class="form-label small">Fecha de Vencimiento</label>
+                        <input type="date" 
+                               class="form-control form-control-sm" 
+                               id="due_date" 
+                               name="due_date" 
+                               value="{% if invoice.due_date %}{{ invoice.due_date.strftime('%Y-%m-%d') }}{% endif %}"
+                               min="{{ invoice.invoice_date.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="bi bi-calendar-check"></i> Actualizar Vencimiento
+                    </button>
+                </form>
+                <small class="text-muted d-block mt-2">
+                    <i class="bi bi-info-circle"></i>
+                    Dejar vacío para quitar vencimiento
+                </small>
+            </div>
+        </div>-->
     </div>
 </div>
 

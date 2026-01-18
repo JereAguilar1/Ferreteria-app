@@ -21,7 +21,7 @@
                         <br><small class="text-muted">SKU: {{ item.product.sku or '-' }}</small>
                     </td>
                     <td class="text-center">
-                        <span class="badge bg-info">{{ item.product.uom.symbol }}</span>
+                        <span class="badge bg-info">{{ item.uom.symbol if item.uom else item.product.uom.symbol }}</span>
                     </td>
                     <td class="text-end">${{ item.unit_price|money_ar }}</td>
                     <td>
@@ -29,7 +29,7 @@
                               hx-target="#cart-container"
                               hx-swap="outerHTML"
                               class="d-flex align-items-center">
-                            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+                            <input type="hidden" name="cart_key" value="{{ item.cart_key }}">
                             <input type="number" 
                                    name="qty" 
                                    value="{{ item.qty }}"
@@ -42,7 +42,7 @@
                                    hx-post="{{ url_for('sales.cart_update') }}"
                                    hx-target="#cart-container"
                                    hx-swap="outerHTML"
-                                   hx-include="[name='product_id']">
+                                   hx-include="[name='cart_key']">
                         </form>
                     </td>
                     <td class="text-end">
@@ -53,7 +53,7 @@
                               hx-target="#cart-container"
                               hx-swap="outerHTML"
                               style="display: inline;">
-                            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+                            <input type="hidden" name="cart_key" value="{{ item.cart_key }}">
                             <button type="submit" 
                                     class="btn btn-sm btn-outline-danger"
                                     title="Eliminar">

@@ -45,7 +45,22 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         session.begin_nested()
         
         # Step 1: Get all product IDs and validate
-        product_ids = [int(pid) for pid in cart['items'].keys()]
+        # MEJORA A: Handle new cart format with product_id in item dict
+        product_ids = []
+        for cart_key, item in cart['items'].items():
+            if isinstance(item, dict) and 'product_id' in item:
+                product_ids.append(item['product_id'])
+            else:
+                # Legacy format
+                try:
+                    product_ids.append(int(cart_key))
+                except ValueError:
+                    # New format: cart_key is "product_id_uom_id"
+                    parts = cart_key.split('_')
+                    if len(parts) >= 2:
+                        product_ids.append(int(parts[0]))
+        
+        product_ids = list(set(product_ids))  # Remove duplicates
         
         # Get products
         products_dict = {}
@@ -78,9 +93,32 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         sale_lines_data = []
         sale_total = Decimal('0.00')
         
-        for product_id_str, item in cart['items'].items():
-            product_id = int(product_id_str)
-            qty = Decimal(str(item['qty']))
+        for cart_key, item in cart['items'].items():
+            # MEJORA A: Handle new cart format
+            if isinstance(item, dict) and 'product_id' in item:
+                product_id = item['product_id']
+                uom_id = item['uom_id']
+                qty = Decimal(str(item['qty']))
+                qty_base = Decimal(str(item['qty_base']))
+                unit_price = Decimal(str(item['unit_price']))
+            else:
+                # Legacy format
+                try:
+                    product_id = int(cart_key)
+                except ValueError:
+                    # New format: cart_key is "product_id_uom_id"
+                    parts = cart_key.split('_')
+                    if len(parts) >= 2:
+                        product_id = int(parts[0])
+                        uom_id = int(parts[1])
+                    else:
+                        continue
+                
+                qty = Decimal(str(item['qty']))
+                qty_base = qty  # Legacy: qty == qty_base
+                product = products_dict[product_id]
+                unit_price = product.sale_price
+                uom_id = product.uom_id
             
             if qty <= 0:
                 raise ValueError(f'La cantidad debe ser mayor a 0')
@@ -88,20 +126,22 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
             product = products_dict[product_id]
             current_stock = stock_dict.get(product_id, Decimal('0'))
             
-            if current_stock < qty:
+            # MEJORA A: Check stock using qty_base
+            if current_stock < qty_base:
                 raise ValueError(
                     f'Stock insuficiente para "{product.name}". '
-                    f'Disponible: {current_stock}, Solicitado: {qty}'
+                    f'Disponible: {current_stock}, Solicitado: {qty_base}'
                 )
             
             # Calculate line total
-            unit_price = product.sale_price
             line_total = (qty * unit_price).quantize(Decimal('0.01'))
             
             sale_lines_data.append({
                 'product_id': product_id,
                 'product': product,
+                'uom_id': uom_id,
                 'qty': qty,
+                'qty_base': qty_base,
                 'unit_price': unit_price,
                 'line_total': line_total
             })
@@ -124,6 +164,7 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
             sale_line = SaleLine(
                 sale_id=sale.id,
                 product_id=line_data['product_id'],
+                uom_id=line_data['uom_id'],  # MEJORA A
                 qty=line_data['qty'],
                 unit_price=line_data['unit_price'],
                 line_total=line_data['line_total']
@@ -143,13 +184,14 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         
         # Step 7: Create StockMoveLines
         # Note: The trigger on stock_move_line will update product_stock automatically
+        # MEJORA A: Use qty_base for stock movement
         for line_data in sale_lines_data:
             product = line_data['product']
             stock_move_line = StockMoveLine(
                 stock_move_id=stock_move.id,
                 product_id=line_data['product_id'],
-                qty=line_data['qty'],
-                uom_id=product.uom_id,
+                qty=line_data['qty_base'],  # MEJORA A: Use qty_base for stock
+                uom_id=line_data['uom_id'],  # MEJORA A: Use selected UOM
                 unit_cost=None  # Not relevant for sales
             )
             session.add(stock_move_line)

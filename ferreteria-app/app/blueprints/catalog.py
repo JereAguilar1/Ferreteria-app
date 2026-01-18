@@ -5,10 +5,15 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 import os
 from app.database import get_session
-from app.models import Product, ProductStock, UOM, Category
+from app.models import Product, ProductStock, UOM, Category, ProductUomPrice
 from app.services.stock_service import adjust_stock_to, get_recent_manual_adjustments
 from app.services.product_service import can_hard_delete_product, get_product_usage_summary
+from app.services.product_uom_service import create_or_update_uom_prices
+from app.utils.decimal_parser import parse_decimal_ar
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 catalog_bp = Blueprint('catalog', __name__, url_prefix='/products')
 
@@ -195,11 +200,41 @@ def create_product():
         sku = request.form.get('sku', '').strip() or None
         barcode = request.form.get('barcode', '').strip() or None
         category_id = request.form.get('category_id', '').strip() or None
-        uom_id = request.form.get('uom_id', '').strip()
-        sale_price = request.form.get('sale_price', '0').strip()
         min_stock_qty = request.form.get('min_stock_qty', '0').strip()  # MEJORA 11
         initial_stock = request.form.get('initial_stock', '').strip()  # MEJORA 24: Stock inicial
         active = request.form.get('active') == 'on'
+        
+        # MEJORA A: Parse UOM prices from form
+        uom_prices_data = []
+        uom_base_index = request.form.get('uom_base_index', '0')
+        
+        i = 0
+        while True:
+            uom_id_key = f'uom_prices[{i}][uom_id]'
+            if uom_id_key not in request.form:
+                break
+            
+            uom_id = request.form.get(uom_id_key, '').strip()
+            sale_price = request.form.get(f'uom_prices[{i}][sale_price]', '0').strip()
+            conversion = request.form.get(f'uom_prices[{i}][conversion_to_base]', '1').strip()
+            
+            if uom_id:  # Only add if UOM is selected
+                uom_prices_data.append({
+                    'uom_id': int(uom_id),
+                    'sale_price': parse_decimal_ar(sale_price, '0', f'uom_prices[{i}][sale_price]'),
+                    'conversion_to_base': parse_decimal_ar(conversion, '1', f'uom_prices[{i}][conversion_to_base]'),
+                    'is_base': (str(i) == uom_base_index)
+                })
+            i += 1
+        
+        # Set uom_id and sale_price from base UOM for backward compatibility
+        base_uom = next((u for u in uom_prices_data if u['is_base']), None)
+        if base_uom:
+            uom_id = base_uom['uom_id']
+            sale_price = str(base_uom['sale_price'])
+        else:
+            uom_id = None
+            sale_price = '0'
         
         # Server-side validations
         errors = []
@@ -207,20 +242,43 @@ def create_product():
         if not name:
             errors.append('El nombre es requerido')
         
-        if not uom_id:
-            errors.append('La unidad de medida es requerida')
+        # MEJORA A: Validate UOM prices
+        if not uom_prices_data:
+            errors.append('Debe definir al menos una unidad de medida con precio')
         else:
-            # Verify UOM exists
-            uom = session.query(UOM).filter_by(id=int(uom_id)).first()
-            if not uom:
-                errors.append('La unidad de medida seleccionada no existe')
+            # Check exactly one base
+            base_count = sum(1 for u in uom_prices_data if u['is_base'])
+            if base_count != 1:
+                errors.append('Debe seleccionar exactamente una unidad de medida como base')
+            
+            # Validate each UOM price
+            for uom_data in uom_prices_data:
+                if uom_data['sale_price'] < 0:
+                    errors.append('Todos los precios de venta deben ser mayores o iguales a 0')
+                    break
+                if uom_data['conversion_to_base'] <= 0:
+                    errors.append('Todos los factores de conversión deben ser mayores a 0')
+                    break
+                
+                # Verify UOM exists
+                uom = session.query(UOM).filter_by(id=uom_data['uom_id']).first()
+                if not uom:
+                    errors.append(f'La unidad de medida con ID {uom_data["uom_id"]} no existe')
+                    break
+            
+            # Check for duplicate UOMs
+            uom_ids = [u['uom_id'] for u in uom_prices_data]
+            if len(uom_ids) != len(set(uom_ids)):
+                errors.append('No puede haber unidades de medida duplicadas')
         
-        try:
-            sale_price_decimal = float(sale_price)
-            if sale_price_decimal < 0:
-                errors.append('El precio de venta debe ser mayor o igual a 0')
-        except ValueError:
-            errors.append('El precio de venta debe ser un número válido')
+        # For backward compatibility
+        if uom_id:
+            try:
+                sale_price_decimal = float(sale_price)
+            except ValueError:
+                sale_price_decimal = 0
+        else:
+            sale_price_decimal = 0
         
         # MEJORA 11: Validate min_stock_qty
         try:
@@ -235,7 +293,7 @@ def create_product():
         initial_stock_decimal = None
         if initial_stock:
             try:
-                initial_stock_decimal = Decimal(initial_stock)
+                initial_stock_decimal = parse_decimal_ar(initial_stock, '0', 'initial_stock')
                 if initial_stock_decimal < 0:
                     errors.append('El stock inicial debe ser mayor o igual a 0')
             except (ValueError, TypeError):
@@ -273,6 +331,26 @@ def create_product():
         )
         
         session.add(product)
+        session.flush()  # Get product.id
+        
+        # MEJORA A: Create UOM prices
+        try:
+            create_or_update_uom_prices(session, product.id, uom_prices_data)
+        except ValueError as e:
+            session.rollback()
+            flash(f'Error al crear precios UOM: {str(e)}', 'danger')
+            uoms = session.query(UOM).order_by(UOM.name).all()
+            categories = session.query(Category).order_by(Category.name).all()
+            return render_template('products/form.html',
+                                 product=None,
+                                 uoms=uoms,
+                                 categories=categories,
+                                 action='new')
+        except Exception as e:
+            session.rollback()
+            flash(f'Error inesperado al crear precios UOM: {str(e)}', 'danger')
+            return redirect(url_for('catalog.new_product_form'))
+        
         session.commit()
         
         # Note: product_stock is created automatically by database trigger (with qty=0)
@@ -370,10 +448,40 @@ def update_product(product_id):
         sku = request.form.get('sku', '').strip() or None
         barcode = request.form.get('barcode', '').strip() or None
         category_id = request.form.get('category_id', '').strip() or None
-        uom_id = request.form.get('uom_id', '').strip()
-        sale_price = request.form.get('sale_price', '0').strip()
         min_stock_qty = request.form.get('min_stock_qty', '0').strip()  # MEJORA 11
         active = request.form.get('active') == 'on'
+        
+        # MEJORA A: Parse UOM prices from form
+        uom_prices_data = []
+        uom_base_index = request.form.get('uom_base_index', '0')
+        
+        i = 0
+        while True:
+            uom_id_key = f'uom_prices[{i}][uom_id]'
+            if uom_id_key not in request.form:
+                break
+            
+            uom_id = request.form.get(uom_id_key, '').strip()
+            sale_price = request.form.get(f'uom_prices[{i}][sale_price]', '0').strip()
+            conversion = request.form.get(f'uom_prices[{i}][conversion_to_base]', '1').strip()
+            
+            if uom_id:  # Only add if UOM is selected
+                uom_prices_data.append({
+                    'uom_id': int(uom_id),
+                    'sale_price': parse_decimal_ar(sale_price, '0', f'uom_prices[{i}][sale_price]'),
+                    'conversion_to_base': parse_decimal_ar(conversion, '1', f'uom_prices[{i}][conversion_to_base]'),
+                    'is_base': (str(i) == uom_base_index)
+                })
+            i += 1
+        
+        # Set uom_id and sale_price from base UOM for backward compatibility
+        base_uom = next((u for u in uom_prices_data if u['is_base']), None)
+        if base_uom:
+            uom_id = base_uom['uom_id']
+            sale_price = str(base_uom['sale_price'])
+        else:
+            uom_id = None
+            sale_price = '0'
         
         # Server-side validations
         errors = []
@@ -381,19 +489,43 @@ def update_product(product_id):
         if not name:
             errors.append('El nombre es requerido')
         
-        if not uom_id:
-            errors.append('La unidad de medida es requerida')
+        # MEJORA A: Validate UOM prices
+        if not uom_prices_data:
+            errors.append('Debe definir al menos una unidad de medida con precio')
         else:
-            uom = session.query(UOM).filter_by(id=int(uom_id)).first()
-            if not uom:
-                errors.append('La unidad de medida seleccionada no existe')
+            # Check exactly one base
+            base_count = sum(1 for u in uom_prices_data if u['is_base'])
+            if base_count != 1:
+                errors.append('Debe seleccionar exactamente una unidad de medida como base')
+            
+            # Validate each UOM price
+            for uom_data in uom_prices_data:
+                if uom_data['sale_price'] < 0:
+                    errors.append('Todos los precios de venta deben ser mayores o iguales a 0')
+                    break
+                if uom_data['conversion_to_base'] <= 0:
+                    errors.append('Todos los factores de conversión deben ser mayores a 0')
+                    break
+                
+                # Verify UOM exists
+                uom = session.query(UOM).filter_by(id=uom_data['uom_id']).first()
+                if not uom:
+                    errors.append(f'La unidad de medida con ID {uom_data["uom_id"]} no existe')
+                    break
+            
+            # Check for duplicate UOMs
+            uom_ids = [u['uom_id'] for u in uom_prices_data]
+            if len(uom_ids) != len(set(uom_ids)):
+                errors.append('No puede haber unidades de medida duplicadas')
         
-        try:
-            sale_price_decimal = float(sale_price)
-            if sale_price_decimal < 0:
-                errors.append('El precio de venta debe ser mayor o igual a 0')
-        except ValueError:
-            errors.append('El precio de venta debe ser un número válido')
+        # For backward compatibility
+        if uom_id:
+            try:
+                sale_price_decimal = float(sale_price)
+            except ValueError:
+                sale_price_decimal = 0
+        else:
+            sale_price_decimal = 0
         
         # MEJORA 11: Validate min_stock_qty
         try:
@@ -438,10 +570,30 @@ def update_product(product_id):
         product.sku = sku
         product.barcode = barcode
         product.category_id = int(category_id) if category_id else None
-        product.uom_id = int(uom_id)
+        product.uom_id = int(uom_id) if uom_id else product.uom_id
         product.sale_price = sale_price_decimal
         product.min_stock_qty = min_stock_qty_decimal  # MEJORA 11
         product.active = active
+        
+        # MEJORA A: Update UOM prices
+        try:
+            create_or_update_uom_prices(session, product.id, uom_prices_data)
+        except ValueError as e:
+            session.rollback()
+            flash(f'Error al actualizar precios UOM: {str(e)}', 'danger')
+            uoms = session.query(UOM).order_by(UOM.name).all()
+            categories = session.query(Category).order_by(Category.name).all()
+            recent_adjustments = get_recent_manual_adjustments(session, product_id, limit=5)
+            return render_template('products/form.html',
+                                 product=product,
+                                 uoms=uoms,
+                                 categories=categories,
+                                 recent_adjustments=recent_adjustments,
+                                 action='edit')
+        except Exception as e:
+            session.rollback()
+            flash(f'Error inesperado al actualizar precios UOM: {str(e)}', 'danger')
+            return redirect(url_for('catalog.list_products'))
         
         session.commit()
         
@@ -650,7 +802,7 @@ def adjust_product_stock(product_id):
             return redirect(url_for('catalog.edit_product', product_id=product_id))
         
         try:
-            new_stock = Decimal(new_stock_str)
+            new_stock = parse_decimal_ar(new_stock_str, '0', 'new_stock')
         except (ValueError, TypeError):
             flash('El stock debe ser un número válido', 'danger')
             return redirect(url_for('catalog.edit_product', product_id=product_id))

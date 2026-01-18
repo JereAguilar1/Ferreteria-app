@@ -2,7 +2,7 @@
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from sqlalchemy import func, case, extract
-from app.models import FinanceLedger, LedgerType
+from app.models import FinanceLedger, LedgerType, Product, ProductStock, ProductUomPrice
 
 
 def get_balance_series(view: str, start: date, end: date, session, method: str = 'all'):
@@ -238,4 +238,40 @@ def get_year_date_range(year: int):
     end = date(year, 12, 31)
     
     return start, end
+
+
+def get_inventory_valuation(session) -> Decimal:
+    """
+    Calculate inventory valuation (Goodwill / Fondo de Comercio).
+    
+    MEJORA C: Sum of (sale_price * on_hand_qty) for all products with stock > 0.
+    Uses the base UOM price for valuation.
+    
+    Args:
+        session: SQLAlchemy session
+        
+    Returns:
+        Decimal: Total inventory value at sale price
+    """
+    # Query: JOIN product_stock + product_uom_price (base) + product
+    # WHERE stock > 0 AND product.active = true AND is_base = true
+    # SUM(stock * sale_price)
+    
+    query = (
+        session.query(
+            func.sum(ProductStock.on_hand_qty * ProductUomPrice.sale_price).label('total_valuation')
+        )
+        .join(ProductUomPrice, ProductUomPrice.product_id == ProductStock.product_id)
+        .join(Product, Product.id == ProductStock.product_id)
+        .filter(ProductStock.on_hand_qty > 0)
+        .filter(Product.active == True)
+        .filter(ProductUomPrice.is_base == True)
+    )
+    
+    result = query.scalar()
+    
+    if result is None:
+        return Decimal('0.00')
+    
+    return Decimal(str(result)).quantize(Decimal('0.01'))
 

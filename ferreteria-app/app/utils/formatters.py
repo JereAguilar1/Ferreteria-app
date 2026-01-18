@@ -5,6 +5,36 @@ Incluye formatos de números, fechas y otros en estilo argentino.
 from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
 from typing import Union, Optional
+from zoneinfo import ZoneInfo
+
+
+def to_argentina(dt: Union[datetime, None]) -> Union[datetime, None]:
+    """
+    Convierte un datetime a la zona horaria de Argentina.
+    
+    Args:
+        dt: Datetime a convertir (puede ser naive o aware)
+    
+    Returns:
+        Datetime en zona horaria Argentina o None si el input es None
+    
+    Examples:
+        to_argentina(datetime(2026, 1, 18, 10, 0, tzinfo=UTC)) 
+        -> datetime(2026, 1, 18, 7, 0, tzinfo=ZoneInfo('America/Argentina/Buenos_Aires'))
+    """
+    if dt is None:
+        return None
+    
+    if not isinstance(dt, datetime):
+        return None
+    
+    # Si el datetime es naive (sin timezone), asumimos UTC
+    if dt.tzinfo is None:
+        from datetime import timezone
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    # Convertir a zona horaria argentina
+    return dt.astimezone(ZoneInfo("America/Argentina/Buenos_Aires"))
 
 
 def num_ar(value: Union[int, float, Decimal, str, None], decimals: Optional[int] = None) -> str:
@@ -162,16 +192,17 @@ def date_ar(value: Union[date, datetime, None]) -> str:
 def datetime_ar(value: Union[datetime, None], with_time: bool = True) -> str:
     """
     Formatea un datetime en formato argentino: DD/MM/YYYY HH:MM
+    Convierte automáticamente a zona horaria de Argentina antes de formatear.
     
     Args:
-        value: Datetime a formatear
+        value: Datetime a formatear (puede ser naive o aware)
         with_time: Si True, incluye hora. Si False, solo fecha.
     
     Returns:
         String formateado o "-" si es None
     
     Examples:
-        datetime_ar(datetime(2026, 1, 12, 15, 30)) -> "12/01/2026 15:30"
+        datetime_ar(datetime(2026, 1, 12, 15, 30, tzinfo=UTC)) -> "12/01/2026 12:30" (Argentina UTC-3)
         datetime_ar(datetime(2026, 1, 12, 15, 30), with_time=False) -> "12/01/2026"
     """
     if value is None:
@@ -180,10 +211,15 @@ def datetime_ar(value: Union[datetime, None], with_time: bool = True) -> str:
     if not isinstance(value, datetime):
         return "-"
     
+    # Convertir a zona horaria argentina
+    value_ar = to_argentina(value)
+    if value_ar is None:
+        return "-"
+    
     if with_time:
-        return value.strftime("%d/%m/%Y %H:%M")
+        return value_ar.strftime("%d/%m/%Y %H:%M")
     else:
-        return value.strftime("%d/%m/%Y")
+        return value_ar.strftime("%d/%m/%Y")
 
 
 def month_ar(value: Union[datetime, None]) -> str:
@@ -232,3 +268,28 @@ def year_ar(value: Union[datetime, int, None]) -> str:
         return value.strftime("%Y")
     
     return "-"
+
+def num_ar(value, decimals=2):
+    """
+    Formatea un número en formato argentino.
+    
+    Args:
+        value: Número a formatear (int, float, Decimal, str)
+        decimals: Número de decimales a mostrar (default: 2)
+    
+    Returns:
+        String formateado en formato AR (1.234,56) o "0,00" si hay error
+    
+    Examples:
+        num_ar(1234.56) -> "1.234,56"
+        num_ar(1234.567, 3) -> "1.234,567"
+        num_ar(1500) -> "1.500,00"
+    """
+    try:
+        value = float(value)
+        # Format with specified decimals
+        formatted = f"{value:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted
+    except (TypeError, ValueError):
+        # Return default with specified decimals
+        return "0" + ("," + "0" * decimals if decimals > 0 else "")

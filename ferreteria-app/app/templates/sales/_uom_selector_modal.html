@@ -1,0 +1,91 @@
+<!-- MEJORA A: UOM Selector Modal -->
+<div class="modal fade" id="uomSelectorModal" tabindex="-1" aria-labelledby="uomSelectorModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="uomSelectorModalLabel">
+                    <i class="bi bi-rulers"></i> Seleccionar Unidad de Medida
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3">{{ product.name }}</h6>
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    Seleccione la unidad de medida en la que desea vender este producto.
+                </p>
+                
+                <form id="uom-selector-form" hx-post="{{ url_for('sales.cart_add') }}"
+                      hx-target="#cart-container"
+                      hx-swap="outerHTML"
+                      hx-on::after-request="bootstrap.Modal.getInstance(document.getElementById('uomSelectorModal')).hide()">
+                    
+                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                    
+                    <div class="mb-3">
+                        <label for="qty" class="form-label">Cantidad</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="qty" 
+                               name="qty" 
+                               value="1"
+                               min="0.01"
+                               step="0.01"
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Unidad de Medida</label>
+                        <div class="list-group">
+                            {% for uom_price in uom_prices %}
+                            <label class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div class="form-check">
+                                    <input class="form-check-input" 
+                                           type="radio" 
+                                           name="uom_id" 
+                                           value="{{ uom_price.uom_id }}"
+                                           id="uom_{{ uom_price.uom_id }}"
+                                           {% if uom_price.is_base %}checked{% endif %}
+                                           required>
+                                    <label class="form-check-label" for="uom_{{ uom_price.uom_id }}">
+                                        <strong>{{ uom_price.uom.name }} ({{ uom_price.uom.symbol }})</strong>
+                                        {% if uom_price.is_base %}
+                                        <span class="badge bg-primary ms-2">Base</span>
+                                        {% endif %}
+                                        <br>
+                                        <small class="text-muted">
+                                            Factor: {{ uom_price.conversion_to_base }} {{ product.uom.symbol }}
+                                        </small>
+                                    </label>
+                                </div>
+                                <div class="text-end">
+                                    <strong class="text-primary">${{ uom_price.sale_price|money_ar }}</strong>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info small mb-0">
+                        <i class="bi bi-box-seam"></i>
+                        <strong>Stock disponible:</strong> {{ product.on_hand_qty|num_ar }} {{ product.uom.symbol }} (unidad base)
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <button type="submit" form="uom-selector-form" class="btn btn-primary">
+                    <i class="bi bi-cart-plus"></i> Agregar al Carrito
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-open modal
+    const uomSelectorModal = new bootstrap.Modal(document.getElementById('uomSelectorModal'));
+    uomSelectorModal.show();
+</script>

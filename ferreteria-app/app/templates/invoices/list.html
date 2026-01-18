@@ -20,15 +20,15 @@
                 <i class="bi bi-list"></i> Todas
             </a>
             <a href="{{ url_for('invoices.list_invoices', status='PENDING') }}" 
-               class="btn btn-outline-warning {% if selected_status == 'PENDING' and not due_soon and not overdue %}active{% endif %}">
+               class="btn btn-outline-secondary {% if selected_status == 'PENDING' and not due_soon and not overdue %}active{% endif %}">
                 <i class="bi bi-clock-history"></i> Pendientes
             </a>
             <a href="{{ url_for('invoices.list_invoices', due_soon=1) }}" 
-               class="btn btn-outline-warning {% if due_soon %}active{% endif %}">
+               class="btn btn-outline-secondary {% if due_soon %}active{% endif %}">
                 <i class="bi bi-clock"></i> Por vencer (mañana)
             </a>
             <a href="{{ url_for('invoices.list_invoices', overdue=1) }}" 
-               class="btn btn-outline-danger {% if overdue %}active{% endif %}">
+               class="btn btn-outline-secondary {% if overdue %}active{% endif %}">
                 <i class="bi bi-exclamation-triangle"></i> Caducadas
             </a>
         </div>
@@ -92,12 +92,7 @@
                 </a>
                 {% endif %}
             </div>
-            <div class="col-auto">
-                <a href="{{ url_for('invoices.list_invoices', status='PENDING') }}" 
-                   class="btn btn-outline-warning {% if selected_status == 'PENDING' %}active{% endif %}">
-                    <i class="bi bi-clock-history"></i> Solo Pendientes
-                </a>
-            </div>
+            
         </form>
     </div>
     <div class="col-md-4 text-end">

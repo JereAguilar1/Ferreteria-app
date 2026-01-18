@@ -11,6 +11,8 @@
                         <th>Fecha</th>
                         <th>Vencimiento</th>
                         <th class="text-end">Total</th>
+                        <th class="text-end">Pagado</th>
+                        <th class="text-end">Saldo</th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
@@ -35,6 +37,16 @@
                             {% endif %}
                         </td>
                         <td class="text-end"><strong>${{ invoice.total_amount|money_ar_2 }}</strong></td>
+                        <td class="text-end">
+                            <span class="{% if invoice.total_paid > 0 %}text-success{% else %}text-muted{% endif %}">
+                                ${{ invoice.total_paid|money_ar_2 }}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            <strong class="{% if invoice.balance == 0 %}text-success{% elif invoice.balance > 0 %}text-danger{% endif %}">
+                                ${{ invoice.balance|money_ar_2 }}
+                            </strong>
+                        </td>
                         <td class="text-center">
                             {% if invoice.is_overdue %}
                             <span class="badge bg-danger">Caducada</span>

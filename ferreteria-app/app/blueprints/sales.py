@@ -1,7 +1,7 @@
 """Sales blueprint for POS and cart management."""
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, send_file, current_app
 from sqlalchemy import or_, func
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from app.database import get_session
 from app.models import Product, ProductStock, Sale, SaleLine, SaleStatus
@@ -11,6 +11,25 @@ from app.services.quote_service import generate_quote_pdf
 
 sales_bp = Blueprint('sales', __name__, url_prefix='/sales')
 
+def parse_decimal_ar(raw, default="0"):
+    """
+    Acepta '1.234,56' (AR) y '1234.56' (normalizado).
+    Devuelve Decimal o lanza ValueError con mensaje claro.
+    """
+    if raw is None:
+        raw = ""
+    s = str(raw).strip()
+
+    if s == "":
+        s = str(default)
+
+    # AR -> estándar Decimal
+    s = s.replace(".", "").replace(",", ".")
+
+    try:
+        return Decimal(s)
+    except InvalidOperation:
+        raise ValueError(f"Numero invalido: {raw!r}")
 
 def get_cart():
     """Get cart from session."""
@@ -27,23 +46,62 @@ def save_cart(cart):
 
 def get_cart_with_products(db_session):
     """Get cart with product details from database."""
+    from app.models import ProductUomPrice, UOM
     cart = get_cart()
     cart_items = []
     total = Decimal('0.00')
     
-    for product_id_str, item in cart['items'].items():
-        product_id = int(product_id_str)
+    for cart_key, item in cart['items'].items():
+        # MEJORA A: Handle new cart format (product_id_uom_id) or legacy (product_id)
+        if isinstance(item, dict) and 'product_id' in item:
+            # New format
+            product_id = item['product_id']
+            uom_id = item['uom_id']
+            qty = Decimal(str(item['qty']))
+            unit_price = Decimal(str(item['unit_price']))
+        else:
+            # Legacy format: cart_key is product_id_str
+            try:
+                product_id = int(cart_key)
+            except ValueError:
+                # New format: cart_key is "product_id_uom_id"
+                parts = cart_key.split('_')
+                if len(parts) == 2:
+                    product_id = int(parts[0])
+                    uom_id = int(parts[1])
+                else:
+                    continue
+            
+            qty = Decimal(str(item['qty']))
+            # Get unit_price from item or product
+            if 'unit_price' in item:
+                unit_price = Decimal(str(item['unit_price']))
+                uom_id = item.get('uom_id')
+            else:
+                # Legacy: get from product
+                product = db_session.query(Product).filter_by(id=product_id).first()
+                if not product:
+                    continue
+                unit_price = product.sale_price
+                uom_id = product.uom_id
+        
         product = db_session.query(Product).filter_by(id=product_id).first()
         
         if product:
-            qty = Decimal(str(item['qty']))
-            subtotal = qty * product.sale_price
+            # Get UOM details
+            uom = db_session.query(UOM).filter_by(id=uom_id).first() if uom_id else product.uom
+            
+            subtotal = qty * unit_price
             
             cart_items.append({
+                'cart_key': cart_key,
                 'product_id': product.id,
                 'product': product,
+                'uom_id': uom_id,
+                'uom': uom,
                 'qty': qty,
-                'unit_price': product.sale_price,
+                'qty_base': Decimal(str(item.get('qty_base', qty))) if isinstance(item, dict) else qty,
+                'unit_price': unit_price,
                 'subtotal': subtotal
             })
             total += subtotal
@@ -99,6 +157,47 @@ def new_sale():
                              top_products=[])
 
 
+@sales_bp.route('/product/<int:product_id>/uom-selector', methods=['GET'])
+def product_uom_selector(product_id):
+    """Get UOM selector modal for a product (HTMX endpoint)."""
+    from app.models import ProductUomPrice
+    db_session = get_session()
+    
+    try:
+        product = db_session.query(Product).filter_by(id=product_id).first()
+        if not product:
+            return '<div class="alert alert-danger">Producto no encontrado</div>'
+        
+        # Get all UOM prices for this product
+        uom_prices = db_session.query(ProductUomPrice).filter_by(product_id=product_id).order_by(
+            ProductUomPrice.is_base.desc()
+        ).all()
+        
+        if not uom_prices or len(uom_prices) == 1:
+            # Only one UOM, add directly with default qty
+            return f'''
+                <script>
+                    htmx.ajax('POST', '{url_for("sales.cart_add")}', {{
+                        target: '#cart-container',
+                        swap: 'outerHTML',
+                        values: {{
+                            product_id: {product_id},
+                            uom_id: {uom_prices[0].uom_id if uom_prices else product.uom_id},
+                            qty: 1
+                        }}
+                    }});
+                </script>
+            '''
+        
+        # Multiple UOMs, show modal
+        return render_template('sales/_uom_selector_modal.html',
+                             product=product,
+                             uom_prices=uom_prices)
+        
+    except Exception as e:
+        return f'<div class="alert alert-danger">Error: {str(e)}</div>'
+
+
 @sales_bp.route('/cart/add', methods=['POST'])
 def cart_add():
     """Add product to cart (HTMX endpoint)."""
@@ -106,7 +205,8 @@ def cart_add():
     
     try:
         product_id = int(request.form.get('product_id'))
-        qty = Decimal(request.form.get('qty', '1'))
+        qty = parse_decimal_ar(request.form.get('qty'), default="1")
+        uom_id = request.form.get('uom_id')  # MEJORA A: UOM selection
         
         if qty <= 0:
             flash('La cantidad debe ser mayor a 0', 'danger')
@@ -123,33 +223,74 @@ def cart_add():
             flash(f'El producto "{product.name}" no está activo', 'warning')
             return redirect(url_for('sales.new_sale'))
         
-        # Check stock
+        # MEJORA A: Get UOM price
+        if uom_id:
+            uom_id = int(uom_id)
+            from app.models import ProductUomPrice
+            uom_price = db_session.query(ProductUomPrice).filter_by(
+                product_id=product_id,
+                uom_id=uom_id
+            ).first()
+            
+            if not uom_price:
+                flash(f'Unidad de medida no válida para "{product.name}"', 'danger')
+                return redirect(url_for('sales.new_sale'))
+            
+            unit_price = uom_price.sale_price
+            conversion_to_base = uom_price.conversion_to_base
+            qty_base = qty * conversion_to_base
+        else:
+            # Fallback to base UOM
+            from app.services.product_uom_service import get_base_uom_price
+            base_uom_price = get_base_uom_price(db_session, product_id)
+            if base_uom_price:
+                uom_id = base_uom_price.uom_id
+                unit_price = base_uom_price.sale_price
+                conversion_to_base = base_uom_price.conversion_to_base
+                qty_base = qty * conversion_to_base
+            else:
+                # Legacy fallback
+                uom_id = product.uom_id
+                unit_price = product.sale_price
+                qty_base = qty
+        
+        # Check stock (in base units)
         if product.on_hand_qty <= 0:
             flash(f'El producto "{product.name}" no tiene stock disponible', 'danger')
             return redirect(url_for('sales.new_sale'))
         
         # Get cart
         cart = get_cart()
-        product_id_str = str(product_id)
+        # MEJORA A: Use product_id + uom_id as key
+        cart_key = f"{product_id}_{uom_id}"
         
         # Add or update qty
-        if product_id_str in cart['items']:
-            current_qty = Decimal(str(cart['items'][product_id_str]['qty']))
+        if cart_key in cart['items']:
+            current_qty = Decimal(str(cart['items'][cart_key]['qty']))
+            current_qty_base = Decimal(str(cart['items'][cart_key]['qty_base']))
             new_qty = current_qty + qty
+            new_qty_base = current_qty_base + qty_base
             
             # Check if new qty exceeds stock
-            if new_qty > product.on_hand_qty:
+            if new_qty_base > product.on_hand_qty:
                 flash(f'Stock insuficiente para "{product.name}". Disponible: {product.on_hand_qty}', 'warning')
                 return redirect(url_for('sales.new_sale'))
             
-            cart['items'][product_id_str]['qty'] = float(new_qty)
+            cart['items'][cart_key]['qty'] = float(new_qty)
+            cart['items'][cart_key]['qty_base'] = float(new_qty_base)
         else:
             # Check if qty exceeds stock
-            if qty > product.on_hand_qty:
+            if qty_base > product.on_hand_qty:
                 flash(f'Stock insuficiente para "{product.name}". Disponible: {product.on_hand_qty}', 'warning')
                 return redirect(url_for('sales.new_sale'))
             
-            cart['items'][product_id_str] = {'qty': float(qty)}
+            cart['items'][cart_key] = {
+                'product_id': product_id,
+                'uom_id': uom_id,
+                'qty': float(qty),
+                'qty_base': float(qty_base),
+                'unit_price': float(unit_price)
+            }
         
         save_cart(cart)
         flash(f'"{product.name}" agregado al carrito', 'success')
@@ -174,8 +315,16 @@ def cart_update():
     db_session = get_session()
     
     try:
-        product_id = int(request.form.get('product_id'))
+        # MEJORA A: Use cart_key instead of product_id
+        cart_key = request.form.get('cart_key', '').strip()
         qty_str = request.form.get('qty', '').strip()
+        
+        if not cart_key:
+            flash('Error: clave de carrito no válida', 'danger')
+            cart_items, cart_total = get_cart_with_products(db_session)
+            return render_template('sales/_cart.html',
+                                 cart_items=cart_items,
+                                 cart_total=cart_total)
         
         # MEJORA 15: Handle empty qty (return cart unchanged)
         if not qty_str:
@@ -196,8 +345,8 @@ def cart_update():
         # MEJORA 15: If qty <= 0, remove item automatically
         if qty <= 0:
             cart = session.get('cart', {'items': {}})
-            if str(product_id) in cart['items']:
-                del cart['items'][str(product_id)]
+            if cart_key in cart['items']:
+                del cart['items'][cart_key]
                 session['cart'] = cart
                 session.modified = True
                 flash('Producto eliminado del carrito', 'info')
@@ -206,6 +355,35 @@ def cart_update():
                                  cart_items=cart_items,
                                  cart_total=cart_total)
         
+        # Get cart and item
+        cart = get_cart()
+        
+        if cart_key not in cart['items']:
+            flash('Producto no encontrado en el carrito', 'warning')
+            cart_items, cart_total = get_cart_with_products(db_session)
+            return render_template('sales/_cart.html',
+                                 cart_items=cart_items,
+                                 cart_total=cart_total)
+        
+        item = cart['items'][cart_key]
+        
+        # Get product_id from cart_key or item
+        if isinstance(item, dict) and 'product_id' in item:
+            product_id = item['product_id']
+            uom_id = item.get('uom_id')
+            conversion_to_base = Decimal(str(item.get('conversion_to_base', 1)))
+        else:
+            # Legacy format: cart_key might be product_id or "product_id_uom_id"
+            try:
+                parts = cart_key.split('_')
+                product_id = int(parts[0])
+                uom_id = int(parts[1]) if len(parts) > 1 else None
+                conversion_to_base = Decimal('1')
+            except:
+                product_id = int(cart_key)
+                uom_id = None
+                conversion_to_base = Decimal('1')
+        
         # Get product and verify stock
         product = db_session.query(Product).filter_by(id=product_id).first()
         
@@ -213,8 +391,24 @@ def cart_update():
             flash('Producto no encontrado', 'danger')
             return redirect(url_for('sales.new_sale'))
         
-        # Check stock
-        if qty > product.on_hand_qty:
+        # MEJORA A: Calculate qty_base for stock validation
+        if isinstance(item, dict) and 'conversion_to_base' in item:
+            conversion_to_base = Decimal(str(item['conversion_to_base']))
+        else:
+            # Get conversion from UOM price if available
+            if uom_id:
+                from app.models import ProductUomPrice
+                uom_price = db_session.query(ProductUomPrice).filter_by(
+                    product_id=product_id,
+                    uom_id=uom_id
+                ).first()
+                if uom_price:
+                    conversion_to_base = uom_price.conversion_to_base
+        
+        qty_base = qty * conversion_to_base
+        
+        # Check stock (in base units)
+        if qty_base > product.on_hand_qty:
             flash(f'Stock insuficiente para "{product.name}". Disponible: {product.on_hand_qty}', 'warning')
             cart_items, cart_total = get_cart_with_products(db_session)
             return render_template('sales/_cart.html',
@@ -222,12 +416,14 @@ def cart_update():
                                  cart_total=cart_total)
         
         # Update cart
-        cart = get_cart()
-        product_id_str = str(product_id)
+        if isinstance(item, dict):
+            cart['items'][cart_key]['qty'] = float(qty)
+            cart['items'][cart_key]['qty_base'] = float(qty_base)
+        else:
+            # Legacy format
+            cart['items'][cart_key] = {'qty': float(qty)}
         
-        if product_id_str in cart['items']:
-            cart['items'][product_id_str]['qty'] = float(qty)
-            save_cart(cart)
+        save_cart(cart)
         
         # Return updated cart partial
         cart_items, cart_total = get_cart_with_products(db_session)
@@ -249,14 +445,21 @@ def cart_remove():
     db_session = get_session()
     
     try:
-        product_id = int(request.form.get('product_id'))
+        # MEJORA A: Use cart_key instead of product_id
+        cart_key = request.form.get('cart_key', '').strip()
+        
+        if not cart_key:
+            flash('Error: clave de carrito no válida', 'danger')
+            cart_items, cart_total = get_cart_with_products(db_session)
+            return render_template('sales/_cart.html',
+                                 cart_items=cart_items,
+                                 cart_total=cart_total)
         
         # Remove from cart
         cart = get_cart()
-        product_id_str = str(product_id)
         
-        if product_id_str in cart['items']:
-            del cart['items'][product_id_str]
+        if cart_key in cart['items']:
+            del cart['items'][cart_key]
             save_cart(cart)
             flash('Producto removido del carrito', 'info')
         

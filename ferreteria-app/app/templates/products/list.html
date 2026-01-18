@@ -72,7 +72,7 @@
                        class="form-control" 
                        id="search_q"
                        name="q" 
-                       placeholder="Nombre, SKU o código de barras..."
+                       placeholder="Nombre"
                        value="{{ search_query or '' }}"
                        hx-get="{{ url_for('catalog.list_products') }}"
                        hx-trigger="input changed delay:350ms, search"

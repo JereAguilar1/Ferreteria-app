@@ -8,7 +8,7 @@ from app.models import FinanceLedger, LedgerType, LedgerReferenceType, PaymentMe
 from app.services.balance_service import (
     get_balance_series, get_default_date_range, get_totals,
     get_available_years, get_available_months, get_month_date_range,
-    get_year_date_range
+    get_year_date_range, get_inventory_valuation  # MEJORA C
 )
 
 balance_bp = Blueprint('balance', __name__, url_prefix='/balance')
@@ -199,6 +199,9 @@ def index():
         # Calculate totals
         totals = get_totals(series)
         
+        # MEJORA C: Get inventory valuation (Goodwill)
+        goodwill = get_inventory_valuation(db_session)
+        
         # Format dates for input fields
         start_str = start.strftime('%Y-%m-%d')
         end_str = end.strftime('%Y-%m-%d')
@@ -208,6 +211,7 @@ def index():
             view=view,
             series=series,
             totals=totals,
+            goodwill=goodwill,  # MEJORA C
             start=start_str,
             end=end_str,
             available_years=available_years,

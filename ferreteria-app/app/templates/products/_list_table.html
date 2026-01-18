@@ -43,14 +43,14 @@
                         <th>ID</th>
                         <th style="width: 80px;">Imagen</th>
                         <th>Nombre</th>
-                        <th>SKU</th>
-                        <th>Código Barras</th>
+                        <!--<th>SKU</th>
+                        <th>Código Barras</th>-->
                         <th>Categoría</th>
                         <th>Unidad</th>
                         <th class="text-end">Precio Venta</th>
                         <th class="text-center">Stock</th>
                         <th class="text-center">Stock Mín.</th>
-                        <th class="text-center">Estado</th>
+                        <!--<th class="text-center">Estado</th>-->
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -77,8 +77,8 @@
                             <br><span class="badge bg-secondary">Sin stock</span>
                             {% endif %}
                         </td>
-                        <td>{{ product.sku or '-' }}</td>
-                        <td>{{ product.barcode or '-' }}</td>
+                        <!--<td>{{ product.sku or '-' }}</td>
+                        <td>{{ product.barcode or '-' }}</td>-->
                         <td>{{ product.category.name if product.category else '-' }}</td>
                         <td>
                             <span class="badge bg-info">{{ product.uom.symbol }}</span>
@@ -101,13 +101,13 @@
                             <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td class="text-center">
+                        <!--<td class="text-center">
                             {% if product.active %}
                             <span class="badge bg-success">Activo</span>
                             {% else %}
                             <span class="badge bg-secondary">Inactivo</span>
                             {% endif %}
-                        </td>
+                        </td>-->
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{{ url_for('catalog.edit_product', product_id=product.id) }}" 
@@ -115,7 +115,7 @@
                                    title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="POST" 
+                                <!--<form method="POST" 
                                       action="{{ url_for('catalog.toggle_active', product_id=product.id) }}"
                                       style="display: inline;">
                                     <button type="submit" 
@@ -124,7 +124,7 @@
                                             onclick="return confirm('¿Está seguro de {% if product.active %}desactivar{% else %}activar{% endif %} este producto?')">
                                         <i class="bi bi-{% if product.active %}toggle-off{% else %}toggle-on{% endif %}"></i>
                                     </button>
-                                </form>
+                                </form>-->
                                 <button type="button"
                                         class="btn btn-outline-danger"
                                         title="Eliminar"

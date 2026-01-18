@@ -34,6 +34,12 @@ class Product(Base):
         single_parent=True,
         passive_deletes=True
     )
+    uom_prices = relationship(
+        'ProductUomPrice',
+        back_populates='product',
+        cascade='all, delete-orphan',
+        order_by='ProductUomPrice.is_base.desc()'
+    )
     
     def __repr__(self):
         return f"<Product(id={self.id}, name='{self.name}', sku='{self.sku}')>"

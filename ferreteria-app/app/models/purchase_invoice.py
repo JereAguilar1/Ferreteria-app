@@ -30,6 +30,7 @@ class PurchaseInvoice(Base):
     # Relationships
     supplier = relationship('Supplier', back_populates='invoices')
     lines = relationship('PurchaseInvoiceLine', back_populates='invoice', cascade='all, delete-orphan')
+    payments = relationship('PurchaseInvoicePayment', back_populates='invoice', cascade='all, delete-orphan', order_by='PurchaseInvoicePayment.paid_at')
     
     def __repr__(self):
         return f"<PurchaseInvoice(id={self.id}, invoice_number='{self.invoice_number}', status={self.status.value})>"

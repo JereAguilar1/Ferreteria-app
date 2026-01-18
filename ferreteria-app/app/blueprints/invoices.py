@@ -4,9 +4,10 @@ from decimal import Decimal
 from datetime import datetime, date, timedelta
 from sqlalchemy import and_
 from app.database import get_session
-from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus
+from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus, PurchaseInvoicePayment
+from sqlalchemy import func
 from app.services.invoice_service import create_invoice_with_lines, update_invoice_with_lines, delete_invoice
-from app.services.payment_service import pay_invoice
+from app.services.payment_service import pay_invoice, add_invoice_payment, get_invoice_balance
 from app.services.invoice_alerts_service import is_invoice_overdue
 from app.utils.number_format import parse_ar_decimal, parse_ar_number
 
@@ -97,9 +98,19 @@ def list_invoices():
         ).all()
         
         # MEJORA 21: Calculate "overdue" status for each invoice
+        # MEJORA B: Calculate balance (total_paid, balance) for each invoice
         today = date.today()
         for invoice in invoices:
             invoice.is_overdue = is_invoice_overdue(invoice, today)
+            
+            # Calculate total paid for this invoice
+            total_paid = (
+                db_session.query(func.coalesce(func.sum(PurchaseInvoicePayment.amount), Decimal('0')))
+                .filter(PurchaseInvoicePayment.invoice_id == invoice.id)
+                .scalar()
+            )
+            invoice.total_paid = total_paid
+            invoice.balance = invoice.total_amount - total_paid
         
         # Get suppliers for filter
         suppliers = db_session.query(Supplier).order_by(Supplier.name).all()
@@ -149,10 +160,16 @@ def view_invoice(invoice_id):
         today_date = date.today()
         invoice.is_overdue = is_invoice_overdue(invoice, today_date)
         
+        # MEJORA B: Calculate balance (total - sum of payments)
+        balance_info = get_invoice_balance(invoice_id, db_session)
+        
         # Pass today's date for payment form default
         today = today_date.strftime('%Y-%m-%d')
         
-        return render_template('invoices/detail.html', invoice=invoice, today=today)
+        return render_template('invoices/detail.html', 
+                             invoice=invoice, 
+                             today=today,
+                             balance_info=balance_info)
         
     except Exception as e:
         # Log the full traceback for debugging
@@ -162,6 +179,130 @@ def view_invoice(invoice_id):
         
         flash(f'Error al cargar boleta: {str(e)}', 'danger')
         return redirect(url_for('invoices.list_invoices'))
+
+
+@invoices_bp.route('/<int:invoice_id>/add-payment', methods=['POST'])
+def add_payment(invoice_id):
+    """
+    Add a partial payment to an invoice (MEJORA B).
+    
+    Allows paying an invoice in multiple installments.
+    """
+    db_session = get_session()
+    
+    try:
+        # Get form data
+        paid_at_str = request.form.get('paid_at', '').strip()
+        amount_str = request.form.get('amount', '').strip()
+        notes = request.form.get('notes', '').strip() or None
+        payment_method = request.form.get('payment_method', 'CASH').strip()
+        
+        # Validate required fields
+        if not paid_at_str:
+            flash('La fecha de pago es obligatoria', 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        if not amount_str:
+            flash('El monto del pago es obligatorio', 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Parse date
+        try:
+            paid_at = datetime.strptime(paid_at_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Fecha de pago inválida', 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Parse amount
+        try:
+            amount = Decimal(amount_str.replace(',', '.'))
+            if amount <= 0:
+                flash('El monto debe ser mayor a 0', 'danger')
+                return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        except (ValueError, TypeError):
+            flash('Monto inválido', 'danger')
+            return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+        # Add payment
+        add_invoice_payment(
+            invoice_id=invoice_id,
+            paid_at=paid_at,
+            amount=amount,
+            session=db_session,
+            notes=notes,
+            payment_method=payment_method
+        )
+        
+        # Get updated balance
+        balance_info = get_invoice_balance(invoice_id, db_session)
+        
+        if balance_info['is_fully_paid']:
+            flash(f'Pago de ${amount} registrado exitosamente. Boleta pagada completamente.', 'success')
+        else:
+            flash(f'Pago de ${amount} registrado exitosamente. Saldo pendiente: ${balance_info["balance"]}', 'success')
+        
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+    except Exception as e:
+        import traceback
+        current_app.logger.error(f"Error adding payment to invoice {invoice_id}: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        flash(f'Error al registrar pago: {str(e)}', 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+
+
+@invoices_bp.route('/<int:invoice_id>/update-due-date', methods=['POST'])
+def update_due_date(invoice_id):
+    """
+    Update the due date of an invoice (MEJORA B).
+    
+    This allows changing the payment deadline without affecting payments or ledger.
+    """
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        
+        if not invoice:
+            flash('Boleta no encontrada', 'danger')
+            return redirect(url_for('invoices.list_invoices'))
+        
+        # Get new due date
+        due_date_str = request.form.get('due_date', '').strip()
+        
+        if due_date_str:
+            try:
+                new_due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+                
+                # Validate: due_date should be >= invoice_date
+                if new_due_date < invoice.invoice_date:
+                    flash('La fecha de vencimiento no puede ser anterior a la fecha de la boleta', 'warning')
+                    return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+                
+                invoice.due_date = new_due_date
+                db_session.commit()
+                
+                flash(f'Fecha de vencimiento actualizada a {new_due_date.strftime("%d/%m/%Y")}', 'success')
+                
+            except ValueError:
+                flash('Fecha de vencimiento inválida', 'danger')
+        else:
+            # Allow clearing due_date
+            invoice.due_date = None
+            db_session.commit()
+            flash('Fecha de vencimiento eliminada', 'success')
+        
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
+        
+    except Exception as e:
+        db_session.rollback()
+        current_app.logger.error(f"Error updating due date for invoice {invoice_id}: {str(e)}")
+        flash(f'Error al actualizar vencimiento: {str(e)}', 'danger')
+        return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
 
 
 @invoices_bp.route('/new', methods=['GET'])

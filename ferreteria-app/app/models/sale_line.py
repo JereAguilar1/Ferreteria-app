@@ -13,12 +13,14 @@ class SaleLine(Base):
     sale_id = Column(BigInteger, ForeignKey('sale.id'), nullable=False)
     product_id = Column(BigInteger, ForeignKey('product.id'), nullable=False)
     qty = Column(Numeric(10, 2), nullable=False)
+    uom_id = Column(BigInteger, ForeignKey('uom.id'), nullable=False)  # MEJORA A
     unit_price = Column(Numeric(10, 2), nullable=False)
     line_total = Column(Numeric(10, 2), nullable=False)
     
     # Relationships
     sale = relationship('Sale', back_populates='lines')
     product = relationship('Product')
+    uom = relationship('UOM')  # MEJORA A
     
     def __repr__(self):
         return f"<SaleLine(id={self.id}, product_id={self.product_id}, qty={self.qty})>"

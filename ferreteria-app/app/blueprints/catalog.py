@@ -208,6 +208,10 @@ def create_product():
         uom_prices_data = []
         uom_base_index = request.form.get('uom_base_index', '0')
         
+        # DEBUG: Log all form data
+        logger.info(f"Creating product '{name}' - Form data keys: {list(request.form.keys())}")
+        logger.info(f"uom_base_index: {uom_base_index}")
+        
         i = 0
         while True:
             uom_id_key = f'uom_prices[{i}][uom_id]'
@@ -218,6 +222,8 @@ def create_product():
             sale_price = request.form.get(f'uom_prices[{i}][sale_price]', '0').strip()
             conversion = request.form.get(f'uom_prices[{i}][conversion_to_base]', '1').strip()
             
+            logger.info(f"Row {i}: uom_id={repr(uom_id)}, sale_price={repr(sale_price)}, conversion={repr(conversion)}")
+            
             if uom_id:  # Only add if UOM is selected
                 uom_prices_data.append({
                     'uom_id': int(uom_id),
@@ -226,6 +232,8 @@ def create_product():
                     'is_base': (str(i) == uom_base_index)
                 })
             i += 1
+        
+        logger.info(f"Total UOM prices parsed: {len(uom_prices_data)}, data: {uom_prices_data}")
         
         # Set uom_id and sale_price from base UOM for backward compatibility
         base_uom = next((u for u in uom_prices_data if u['is_base']), None)

@@ -600,17 +600,24 @@ function attachNumArHandlers(input) {
 
   input.addEventListener('focus', function() {
     // editable en formato backend, pero sin romper decimales
-    this.value = normalizeToBackend(this.value);
+    const normalized = normalizeToBackend(this.value);
+    this.value = normalized || '0.00';
     this.select?.();
   });
 
   input.addEventListener('blur', function() {
     // display AR
-    this.value = formatNumberAR(this.value);
+    const formatted = formatNumberAR(this.value);
+    this.value = formatted || '0,00';
   });
 
-  // formatear al cargar
-  input.value = formatNumberAR(input.value);
+  // formatear al cargar - solo si tiene valor
+  if (input.value) {
+    const formatted = formatNumberAR(input.value);
+    if (formatted) {
+      input.value = formatted;
+    }
+  }
 }
 
 /* =========================
@@ -625,6 +632,54 @@ document.addEventListener('DOMContentLoaded', function() {
    ========================= */
 document.addEventListener('submit', function(e) {
   const form = e.target;
+  
+  // Solo validar el formulario de producto
+  if (form.id === 'product-form') {
+    // Validar UOM prices
+    const rows = form.querySelectorAll('.uom-price-row');
+    
+    // Check at least one row
+    if (rows.length === 0) {
+      e.preventDefault();
+      alert('Debe definir al menos una unidad de medida con precio');
+      return false;
+    }
+    
+    // Check exactly one base
+    const baseRadios = form.querySelectorAll('.is-base-radio:checked');
+    if (baseRadios.length !== 1) {
+      e.preventDefault();
+      alert('Debe seleccionar exactamente una unidad de medida como base');
+      return false;
+    }
+    
+    // Check for duplicate UOMs
+    const selectedUoms = Array.from(form.querySelectorAll('.uom-select'))
+      .map(select => select.value)
+      .filter(value => value !== '');
+    
+    const uniqueUoms = new Set(selectedUoms);
+    if (selectedUoms.length !== uniqueUoms.size) {
+      e.preventDefault();
+      alert('No puede haber unidades de medida duplicadas');
+      return false;
+    }
+    
+    // Log form data for debugging
+    console.log('Submitting product form with', rows.length, 'UOM rows');
+    rows.forEach((row, idx) => {
+      const uomSelect = row.querySelector('.uom-select');
+      const priceInput = row.querySelector('input[name*="sale_price"]');
+      const convInput = row.querySelector('input[name*="conversion_to_base"]');
+      console.log(`Row ${idx}:`, {
+        uom: uomSelect?.value,
+        price: priceInput?.value,
+        conversion: convInput?.value
+      });
+    });
+  }
+  
+  // Normalizar todos los inputs num-ar
   form.querySelectorAll('.num-ar').forEach(input => {
     input.value = normalizeToBackend(input.value);
   });

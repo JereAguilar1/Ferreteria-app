@@ -7,6 +7,7 @@ import os
 from app.database import get_session
 from app.models import Product, ProductStock, UOM, Category
 from app.services.stock_service import adjust_stock_to, get_recent_manual_adjustments
+from app.services.product_service import can_hard_delete_product, get_product_usage_summary
 from decimal import Decimal
 
 catalog_bp = Blueprint('catalog', __name__, url_prefix='/products')
@@ -501,17 +502,55 @@ def toggle_active(product_id):
         return redirect(url_for('catalog.list_products'))
 
 
+@catalog_bp.route('/<int:product_id>/delete/preview', methods=['GET'])
+def delete_product_preview(product_id):
+    """
+    Show a preview/confirmation modal before deleting a product.
+    
+    This checks if the product can be safely deleted and shows
+    appropriate warnings or confirmation.
+    """
+    session = get_session()
+    
+    try:
+        product = session.query(Product).filter_by(id=product_id).first()
+        
+        if not product:
+            return '<div class="alert alert-danger">Producto no encontrado.</div>'
+        
+        # Check if product can be deleted
+        can_delete, reason = can_hard_delete_product(session, product_id)
+        
+        # Get usage summary for detailed info
+        usage = get_product_usage_summary(session, product_id)
+        
+        return render_template('products/_delete_confirm_modal.html',
+                             product=product,
+                             can_delete=can_delete,
+                             reason=reason,
+                             usage=usage)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in delete preview for product {product_id}: {e}")
+        return f'<div class="alert alert-danger">Error al cargar vista previa: {str(e)}</div>'
+
+
 @catalog_bp.route('/<int:product_id>/delete', methods=['POST'])
 def delete_product(product_id):
     """
-    Delete a product permanently.
+    Delete a product permanently (hard delete).
     
-    This operation will fail (by design) if the product has any associated:
-    - Sales lines
-    - Purchase invoice lines
-    - Stock move lines
+    This operation only succeeds if the product has NO references in:
+    - sale_line (sales)
+    - purchase_invoice_line (purchase invoices)
+    - stock_move_line (stock movements)
     
-    In those cases, the user should use 'toggle_active' (deactivate) instead.
+    If the product is referenced, deletion is blocked and the user
+    is advised to use 'Deactivate' (soft delete) instead.
+    
+    On successful deletion:
+    - product_stock is automatically deleted (cascade)
+    - product image file is deleted from disk
     """
     session = get_session()
     
@@ -522,13 +561,26 @@ def delete_product(product_id):
             flash('Producto no encontrado', 'danger')
             return redirect(url_for('catalog.list_products'))
         
-        # Store product name for flash message
+        # Store product info for flash message and cleanup
         product_name = product.name
         image_path = product.image_path
         
+        # Check if product can be safely deleted
+        can_delete, reason = can_hard_delete_product(session, product_id)
+        
+        if not can_delete:
+            # Product has references, cannot delete
+            flash(
+                f'No se puede eliminar el producto "{product_name}". '
+                f'{reason}. '
+                'Use la opción "Desactivar" en su lugar.',
+                'warning'
+            )
+            return redirect(url_for('catalog.list_products'))
+        
+        # Product can be deleted safely
         try:
-            # Try to delete the product
-            # If there are foreign key references, this will raise IntegrityError
+            # Delete product (product_stock will be deleted automatically via cascade)
             session.delete(product)
             session.commit()
             
@@ -544,6 +596,7 @@ def delete_product(product_id):
                     )
                     if os.path.exists(image_full_path):
                         os.remove(image_full_path)
+                        current_app.logger.info(f"Deleted product image: {image_path}")
                 except Exception as img_err:
                     # Don't fail the whole operation if image deletion fails
                     current_app.logger.warning(f"Failed to delete image {image_path}: {img_err}")
@@ -553,23 +606,16 @@ def delete_product(product_id):
             
         except IntegrityError as integrity_err:
             session.rollback()
-            error_detail = str(integrity_err.orig).lower()
+            error_detail = str(integrity_err.orig)
+            current_app.logger.error(f"IntegrityError deleting product {product_id}: {error_detail}")
             
-            # Provide user-friendly message
-            if 'foreign key' in error_detail or 'violates foreign key constraint' in error_detail:
-                flash(
-                    f'No se puede eliminar el producto "{product_name}" porque tiene '
-                    'movimientos, ventas o compras asociadas. '
-                    'Use la opción "Desactivar" en su lugar.',
-                    'warning'
-                )
-            else:
-                flash(
-                    f'No se puede eliminar el producto "{product_name}" debido a referencias en el sistema. '
-                    'Use la opción "Desactivar" en su lugar.',
-                    'warning'
-                )
-            
+            # This shouldn't happen if can_hard_delete_product works correctly
+            # But we keep it as a safety net
+            flash(
+                f'No se puede eliminar el producto "{product_name}" debido a referencias en el sistema. '
+                'Use la opción "Desactivar" en su lugar.',
+                'warning'
+            )
             return redirect(url_for('catalog.list_products'))
         
     except Exception as e:

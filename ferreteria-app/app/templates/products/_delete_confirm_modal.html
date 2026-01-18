@@ -1,0 +1,167 @@
+<div class="modal fade" id="confirmDeleteProductModal" tabindex="-1" aria-labelledby="confirmDeleteProductModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header {% if can_delete %}bg-danger{% else %}bg-warning{% endif %} text-white">
+                <h5 class="modal-title" id="confirmDeleteProductModalLabel">
+                    <i class="bi bi-trash"></i> 
+                    {% if can_delete %}Confirmar Eliminación{% else %}No se puede Eliminar{% endif %}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if can_delete %}
+                <!-- Product CAN be deleted -->
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>¡Atención!</strong> Esta acción es irreversible.
+                </div>
+
+                <h6>¿Está seguro de eliminar este producto?</h6>
+                
+                <div class="card mt-3 mb-3">
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">Nombre:</dt>
+                            <dd class="col-sm-8"><strong>{{ product.name }}</strong></dd>
+                            
+                            {% if product.sku %}
+                            <dt class="col-sm-4">SKU:</dt>
+                            <dd class="col-sm-8">{{ product.sku }}</dd>
+                            {% endif %}
+                            
+                            {% if product.barcode %}
+                            <dt class="col-sm-4">Código Barras:</dt>
+                            <dd class="col-sm-8">{{ product.barcode }}</dd>
+                            {% endif %}
+                            
+                            <dt class="col-sm-4">Stock Actual:</dt>
+                            <dd class="col-sm-8">{{ product.on_hand_qty|num_ar }} {{ product.uom.symbol }}</dd>
+                            
+                            <dt class="col-sm-4">Precio Venta:</dt>
+                            <dd class="col-sm-8">${{ product.sale_price|money_ar }}</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Se eliminará:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>El producto y todos sus datos</li>
+                        <li>El registro de stock asociado</li>
+                        {% if product.image_path %}
+                        <li>La imagen del producto</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="alert alert-success" role="alert">
+                    <i class="bi bi-check-circle"></i>
+                    Este producto <strong>NO tiene</strong> ventas, compras ni movimientos de stock asociados.
+                    Es seguro eliminarlo.
+                </div>
+
+                {% else %}
+                <!-- Product CANNOT be deleted -->
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>No se puede eliminar este producto</strong>
+                </div>
+
+                <div class="card mt-3 mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">{{ product.name }}</h6>
+                        {% if product.sku %}
+                        <p class="card-text small text-muted mb-0">SKU: {{ product.sku }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-x-circle"></i>
+                    <strong>Motivo:</strong> {{ reason }}
+                </div>
+
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">Referencias en el Sistema:</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled mb-0">
+                            {% if usage.sales > 0 %}
+                            <li class="mb-2">
+                                <i class="bi bi-cart text-danger"></i>
+                                <strong>{{ usage.sales }}</strong> venta(s)
+                            </li>
+                            {% endif %}
+                            
+                            {% if usage.invoices > 0 %}
+                            <li class="mb-2">
+                                <i class="bi bi-receipt text-danger"></i>
+                                <strong>{{ usage.invoices }}</strong> línea(s) de boleta
+                            </li>
+                            {% endif %}
+                            
+                            {% if usage.stock_moves > 0 %}
+                            <li class="mb-2">
+                                <i class="bi bi-box-seam text-danger"></i>
+                                <strong>{{ usage.stock_moves }}</strong> movimiento(s) de stock
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3 mb-0" role="alert">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Alternativa:</strong> Use la opción <strong>"Desactivar"</strong> para ocultar el producto 
+                    sin perder el historial de ventas y compras.
+                </div>
+
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                
+                {% if can_delete %}
+                <form method="POST" action="{{ url_for('catalog.delete_product', product_id=product.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" id="confirmDeleteBtn">
+                        <i class="bi bi-trash"></i> Eliminar Producto
+                    </button>
+                </form>
+                {% else %}
+                <a href="{{ url_for('catalog.edit_product', product_id=product.id) }}" class="btn btn-warning">
+                    <i class="bi bi-pencil"></i> Ir a Editar (Desactivar)
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-open the modal when it's inserted into the DOM
+(function() {
+    const modalElement = document.getElementById('confirmDeleteProductModal');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+        
+        // Disable button on submit to prevent double-click
+        const btn = document.getElementById('confirmDeleteBtn');
+        if (btn) {
+            btn.closest('form').addEventListener('submit', function() {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Eliminando...';
+            });
+        }
+        
+        // Optional: Remove modal from DOM after it's hidden
+        modalElement.addEventListener('hidden.bs.modal', function () {
+            modalElement.remove();
+        });
+    }
+})();
+</script>

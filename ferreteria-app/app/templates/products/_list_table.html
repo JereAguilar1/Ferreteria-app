@@ -128,11 +128,9 @@
                                 <button type="button"
                                         class="btn btn-outline-danger"
                                         title="Eliminar"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#deleteProductModal"
-                                        data-product-id="{{ product.id }}"
-                                        data-product-name="{{ product.name }}"
-                                        data-product-sku="{{ product.sku or 'N/A' }}">
+                                        hx-get="{{ url_for('catalog.delete_product_preview', product_id=product.id) }}"
+                                        hx-target="#delete-modal-container"
+                                        hx-swap="innerHTML">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>

@@ -26,7 +26,14 @@ class Product(Base):
     # Relationships
     category = relationship('Category', foreign_keys=[category_id])
     uom = relationship('UOM', foreign_keys=[uom_id])
-    stock = relationship('ProductStock', uselist=False, back_populates='product')
+    stock = relationship(
+        'ProductStock',
+        uselist=False,
+        back_populates='product',
+        cascade='all, delete-orphan',
+        single_parent=True,
+        passive_deletes=True
+    )
     
     def __repr__(self):
         return f"<Product(id={self.id}, name='{self.name}', sku='{self.sku}')>"

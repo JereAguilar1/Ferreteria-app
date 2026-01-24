@@ -59,22 +59,38 @@ CREATE TABLE IF NOT EXISTS category (
 );
 
 CREATE TABLE IF NOT EXISTS product (
-  id          BIGSERIAL PRIMARY KEY,
-  sku         VARCHAR(64) UNIQUE,
-  barcode     VARCHAR(64) UNIQUE,
-  name        VARCHAR(200) NOT NULL,
-  category_id BIGINT REFERENCES category(id) ON UPDATE RESTRICT ON DELETE SET NULL,
-  uom_id      BIGINT NOT NULL REFERENCES uom(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  active      BOOLEAN NOT NULL DEFAULT TRUE,
-  sale_price  NUMERIC(12,2) NOT NULL CHECK (sale_price >= 0),
-  image_path  VARCHAR(255),  -- MEJORA 1: Ruta de imagen del producto
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id            BIGSERIAL PRIMARY KEY,
+  sku           VARCHAR(64) UNIQUE,
+  barcode       VARCHAR(64) UNIQUE,
+  name          VARCHAR(200) NOT NULL,
+  category_id   BIGINT REFERENCES category(id) ON UPDATE RESTRICT ON DELETE SET NULL,
+  uom_id        BIGINT NOT NULL REFERENCES uom(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
+  sale_price    NUMERIC(12,2) NOT NULL CHECK (sale_price >= 0),
+  image_path    VARCHAR(255),  -- MEJORA 1
+  min_stock_qty NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (min_stock_qty >= 0), -- MEJORA 11
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- MEJORA A: Product UOM Prices
+CREATE TABLE IF NOT EXISTS product_uom_price (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL REFERENCES product(id) ON DELETE CASCADE,
+    uom_id BIGINT NOT NULL REFERENCES uom(id),
+    sale_price NUMERIC(12, 2) NOT NULL CHECK (sale_price >= 0),
+    conversion_to_base NUMERIC(12, 4) NOT NULL DEFAULT 1 CHECK (conversion_to_base > 0),
+    is_base BOOLEAN NOT NULL DEFAULT false,
+    sku VARCHAR(255),
+    barcode VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_product_uom UNIQUE (product_id, uom_id)
 );
 
 -- Stock current snapshot (fast reads)
 CREATE TABLE IF NOT EXISTS product_stock (
-  product_id  BIGINT PRIMARY KEY REFERENCES product(id) ON UPDATE RESTRICT ON DELETE CASCADE,
+  product_id  BIGINT PRIMARY KEY REFERENCES product(id) ON UPDATE RESTRICT ON DELETE CASCADE, -- FIX: CASCADE
   on_hand_qty NUMERIC(12,3) NOT NULL DEFAULT 0 CHECK (on_hand_qty >= 0),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -111,10 +127,50 @@ CREATE TABLE IF NOT EXISTS sale_line (
   id          BIGSERIAL PRIMARY KEY,
   sale_id     BIGINT NOT NULL REFERENCES sale(id) ON UPDATE RESTRICT ON DELETE CASCADE,
   product_id  BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  uom_id      BIGINT NOT NULL REFERENCES uom(id), -- MEJORA A
   qty         NUMERIC(12,3) NOT NULL CHECK (qty > 0),
   unit_price  NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
   line_total  NUMERIC(12,2) NOT NULL CHECK (line_total >= 0),
   CONSTRAINT sale_line_total_consistency CHECK (line_total = round(qty * unit_price, 2))
+);
+
+-- =========================
+-- QUOTES (MEJORA 13 + 14)
+-- =========================
+CREATE TABLE IF NOT EXISTS quote (
+    id BIGSERIAL PRIMARY KEY,
+    quote_number VARCHAR(64) NOT NULL UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_until DATE,
+    notes TEXT,
+    payment_method VARCHAR(20),  -- 'CASH', 'TRANSFER'
+    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+    sale_id BIGINT UNIQUE REFERENCES sale(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+    customer_name VARCHAR(255) NOT NULL DEFAULT '', -- MEJORA 14
+    customer_phone VARCHAR(50), -- MEJORA 14
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT chk_quote_status CHECK (status IN ('DRAFT', 'SENT', 'ACCEPTED', 'CANCELED')),
+    CONSTRAINT chk_quote_payment_method CHECK (payment_method IS NULL OR payment_method IN ('CASH', 'TRANSFER')),
+    CONSTRAINT chk_quote_accepted_has_sale CHECK (
+        (status = 'ACCEPTED' AND sale_id IS NOT NULL) OR 
+        (status != 'ACCEPTED')
+    )
+);
+
+CREATE TABLE IF NOT EXISTS quote_line (
+    id BIGSERIAL PRIMARY KEY,
+    quote_id BIGINT NOT NULL REFERENCES quote(id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    product_id BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+    product_name_snapshot VARCHAR(200) NOT NULL,
+    uom_snapshot VARCHAR(16),
+    qty NUMERIC(12,3) NOT NULL CHECK (qty > 0),
+    unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price >= 0),
+    line_total NUMERIC(14,2) NOT NULL CHECK (line_total >= 0),
+    
+    CONSTRAINT chk_quote_line_total_consistency CHECK (line_total = round(qty * unit_price, 2))
 );
 
 -- =========================
@@ -136,7 +192,7 @@ CREATE TABLE IF NOT EXISTS purchase_invoice (
   invoice_number VARCHAR(80) NOT NULL,
   invoice_date  DATE NOT NULL,
   due_date      DATE,
-  total_amount  NUMERIC(12,2) NOT NULL CHECK (total_amount >= 0),
+  total_amount  NUMERIC(14,2) NOT NULL CHECK (total_amount >= 0), -- MEJORA 24
   status        invoice_status NOT NULL DEFAULT 'PENDING',
   paid_at       DATE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -152,9 +208,19 @@ CREATE TABLE IF NOT EXISTS purchase_invoice_line (
   invoice_id  BIGINT NOT NULL REFERENCES purchase_invoice(id) ON UPDATE RESTRICT ON DELETE CASCADE,
   product_id  BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   qty         NUMERIC(12,3) NOT NULL CHECK (qty > 0),
-  unit_cost   NUMERIC(12,4) NOT NULL CHECK (unit_cost >= 0),
-  line_total  NUMERIC(12,2) NOT NULL CHECK (line_total >= 0),
+  unit_cost   NUMERIC(14,2) NOT NULL CHECK (unit_cost >= 0), -- MEJORA 24
+  line_total  NUMERIC(14,2) NOT NULL CHECK (line_total >= 0), -- MEJORA 24
   CONSTRAINT invoice_line_total_consistency CHECK (line_total = round(qty * unit_cost, 2))
+);
+
+-- MEJORA B: Pagos Parciales
+CREATE TABLE IF NOT EXISTS purchase_invoice_payment (
+    id BIGSERIAL PRIMARY KEY,
+    invoice_id BIGINT NOT NULL REFERENCES purchase_invoice(id) ON DELETE CASCADE,
+    paid_at DATE NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    notes VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- =========================
@@ -173,7 +239,7 @@ CREATE TABLE IF NOT EXISTS stock_move_line (
   id            BIGSERIAL PRIMARY KEY,
   stock_move_id BIGINT NOT NULL REFERENCES stock_move(id) ON UPDATE RESTRICT ON DELETE CASCADE,
   product_id    BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  qty           NUMERIC(12,3) NOT NULL CHECK (qty != 0),  -- Allow negative for ADJUST
+  qty           NUMERIC(12,3) NOT NULL CHECK (qty != 0),  -- Allow negative for ADJUST (FIX)
   uom_id        BIGINT NOT NULL REFERENCES uom(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   unit_cost     NUMERIC(12,4) CHECK (unit_cost >= 0)
 );
@@ -189,7 +255,8 @@ CREATE TABLE IF NOT EXISTS finance_ledger (
   category       VARCHAR(80),
   reference_type ledger_ref_type NOT NULL,
   reference_id   BIGINT,
-  notes          TEXT
+  notes          TEXT,
+  payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH' CHECK (payment_method IN ('CASH', 'TRANSFER')) -- MEJORA 12
 );
 
 -- =========================
@@ -200,8 +267,12 @@ CREATE INDEX IF NOT EXISTS idx_product_category     ON product(category_id);
 CREATE INDEX IF NOT EXISTS idx_product_uom          ON product(uom_id);
 CREATE INDEX IF NOT EXISTS idx_product_active       ON product(active);
 CREATE INDEX IF NOT EXISTS idx_product_name         ON product(name);
--- Optional: fuzzy search
--- CREATE INDEX IF NOT EXISTS idx_product_name_trgm ON product USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_product_min_stock_qty ON product(min_stock_qty); -- MEJORA 11
+
+-- Product UOM Prices (MEJORA A)
+CREATE INDEX IF NOT EXISTS idx_product_uom_price_product_id ON product_uom_price(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_uom_price_uom_id ON product_uom_price(uom_id);
+CREATE INDEX IF NOT EXISTS idx_product_uom_price_is_base ON product_uom_price(product_id, is_base) WHERE is_base = true;
 
 -- Stock
 CREATE INDEX IF NOT EXISTS idx_stock_move_date      ON stock_move(date DESC);
@@ -215,6 +286,16 @@ CREATE INDEX IF NOT EXISTS idx_sale_status          ON sale(status);
 CREATE INDEX IF NOT EXISTS idx_sale_line_sale       ON sale_line(sale_id);
 CREATE INDEX IF NOT EXISTS idx_sale_line_product    ON sale_line(product_id);
 
+-- Quotes (MEJORA 13)
+CREATE INDEX IF NOT EXISTS idx_quote_number ON quote(quote_number);
+CREATE INDEX IF NOT EXISTS idx_quote_status_issued ON quote(status, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_quote_sale_id ON quote(sale_id);
+CREATE INDEX IF NOT EXISTS idx_quote_valid_until ON quote(valid_until);
+CREATE INDEX IF NOT EXISTS idx_quote_line_quote_id ON quote_line(quote_id);
+CREATE INDEX IF NOT EXISTS idx_quote_line_product_id ON quote_line(product_id);
+CREATE INDEX IF NOT EXISTS idx_quote_customer_name ON quote(customer_name); -- MEJORA 14
+CREATE INDEX IF NOT EXISTS idx_quote_customer_phone ON quote(customer_phone);
+
 -- Suppliers / invoices
 CREATE INDEX IF NOT EXISTS idx_invoice_supplier     ON purchase_invoice(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_status       ON purchase_invoice(status);
@@ -227,10 +308,15 @@ CREATE INDEX IF NOT EXISTS idx_invoice_pending_supplier
   ON purchase_invoice(supplier_id)
   WHERE status = 'PENDING';
 
+-- Invoice Payments (MEJORA B)
+CREATE INDEX IF NOT EXISTS idx_invoice_payment_invoice_id ON purchase_invoice_payment(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_payment_paid_at ON purchase_invoice_payment(paid_at);
+
 -- Finance ledger balance
 CREATE INDEX IF NOT EXISTS idx_ledger_datetime      ON finance_ledger(datetime DESC);
 CREATE INDEX IF NOT EXISTS idx_ledger_type          ON finance_ledger(type);
 CREATE INDEX IF NOT EXISTS idx_ledger_ref           ON finance_ledger(reference_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_finance_ledger_payment_method ON finance_ledger(payment_method); -- MEJORA 12
 
 -- =========================
 -- CONSTRAINT TRIGGERS (DEFERRABLE): enforce lines exist + totals match
@@ -424,6 +510,83 @@ BEFORE UPDATE ON product
 FOR EACH ROW
 EXECUTE FUNCTION trg_set_updated_at();
 
+-- Trigger for quote updated_at (MEJORA 13)
+CREATE OR REPLACE FUNCTION trg_quote_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at := now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS quote_set_updated_at ON quote;
+CREATE TRIGGER quote_set_updated_at
+    BEFORE UPDATE ON quote
+    FOR EACH ROW
+    EXECUTE FUNCTION trg_quote_set_updated_at();
+
+-- =========================
+-- SINGLE BASE UOM CONSTRAINT (MEJORA A + FIX)
+-- =========================
+CREATE OR REPLACE FUNCTION check_single_base_uom()
+RETURNS TRIGGER AS $$
+DECLARE
+    base_count INTEGER;
+BEGIN
+    -- Si se está marcando como base, desmarcar las demás del mismo producto
+    IF NEW.is_base = true THEN
+        UPDATE product_uom_price
+        SET is_base = false
+        WHERE product_id = NEW.product_id
+          AND id != COALESCE(NEW.id, -1)  -- En INSERT, NEW.id es NULL, usa -1
+          AND is_base = true;
+    END IF;
+    
+    -- Validar que después de esta operación haya al menos una UOM base
+    -- Contar cuántas UOMs base habrá después de esta operación
+    
+    IF TG_OP = 'INSERT' THEN
+        -- En INSERT, contar las existentes + la nueva si es base
+        SELECT COUNT(*) INTO base_count
+        FROM product_uom_price
+        WHERE product_id = NEW.product_id
+          AND is_base = true;
+        
+        -- Si la nueva es base, sumar 1
+        IF NEW.is_base = true THEN
+            base_count := base_count + 1;
+        END IF;
+        
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- En UPDATE, contar incluyendo el cambio actual
+        SELECT COUNT(*) INTO base_count
+        FROM product_uom_price
+        WHERE product_id = NEW.product_id
+          AND is_base = true
+          AND id != NEW.id;  -- Excluir el registro actual
+        
+        -- Si el registro actual será base, sumar 1
+        IF NEW.is_base = true THEN
+            base_count := base_count + 1;
+        END IF;
+    END IF;
+    
+    -- Validar que haya al menos una base
+    IF base_count = 0 THEN
+        RAISE EXCEPTION 'El producto debe tener al menos una UOM base';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Recrear trigger
+CREATE TRIGGER trg_check_single_base_uom
+    BEFORE INSERT OR UPDATE ON product_uom_price
+    FOR EACH ROW
+    EXECUTE FUNCTION check_single_base_uom();
+
+
 -- =========================
 -- MISSING PRODUCT REQUESTS (MEJORA 18)
 -- =========================
@@ -460,3 +623,9 @@ CREATE TRIGGER missing_product_set_updated_at
     EXECUTE FUNCTION trg_missing_product_set_updated_at();
 
 COMMIT;
+
+-- DATA MIGRATIONS / SEEDS (NO INCLUIDAS EN SCHEMA BASE)
+-- 1. MEJORA A: Backfill de product_uom_price con datos de product
+-- 2. MEJORA A: Backfill de sale_line.uom_id y sale_line.unit_price
+-- 3. MEJORA A: Backfill de stock_move_line.uom_id
+-- 4. MEJORA B: Backfill de purchase_invoice_payment desde purchase_invoice (status=PAID)

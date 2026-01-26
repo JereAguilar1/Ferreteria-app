@@ -14,5 +14,5 @@ else
 fi
 
 echo ""
-echo "Para aplicar en PRODUCCIÓN, ejecutar:"
-echo "psql -U usuario -d database < db/migrations/FIX_check_single_base_uom_trigger.sql"
+echo "Para aplicar en PRODUCCIÓN, ejecutar:"psql -U usuario -d database < db/migrations/FIX_check_single_base_uom_trigger.sql
+echo ""

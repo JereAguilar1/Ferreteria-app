@@ -69,6 +69,7 @@ class FinanceLedger(Base):
     datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     type = Column(Enum(LedgerType, name='ledger_type'), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
+    concept = Column(String(255), nullable=False)
     category = Column(String, nullable=True)
     reference_type = Column(Enum(LedgerReferenceType, name='ledger_ref_type'), nullable=False)
     reference_id = Column(BigInteger, nullable=True)

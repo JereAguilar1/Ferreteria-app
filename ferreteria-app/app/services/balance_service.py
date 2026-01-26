@@ -275,3 +275,28 @@ def get_inventory_valuation(session) -> Decimal:
     
     return Decimal(str(result)).quantize(Decimal('0.01'))
 
+
+def get_current_total_balance(session) -> Decimal:
+    """
+    Calculate the current net balance (total income - total expense).
+    
+    Args:
+        session: SQLAlchemy session
+        
+    Returns:
+        Decimal: Current net balance
+    """
+    income_sum = (
+        session.query(func.sum(FinanceLedger.amount))
+        .filter(FinanceLedger.type == LedgerType.INCOME)
+        .scalar()
+    ) or Decimal('0.00')
+    
+    expense_sum = (
+        session.query(func.sum(FinanceLedger.amount))
+        .filter(FinanceLedger.type == LedgerType.EXPENSE)
+        .scalar()
+    ) or Decimal('0.00')
+    
+    return Decimal(str(income_sum)) - Decimal(str(expense_sum))
+

@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS finance_ledger (
   datetime       TIMESTAMPTZ NOT NULL DEFAULT now(),
   type           ledger_type NOT NULL,
   amount         NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  concept        VARCHAR(255) NOT NULL,
   category       VARCHAR(80),
   reference_type ledger_ref_type NOT NULL,
   reference_id   BIGINT,

@@ -8,7 +8,7 @@ from app.models import FinanceLedger, LedgerType, LedgerReferenceType, PaymentMe
 from app.services.balance_service import (
     get_balance_series, get_default_date_range, get_totals,
     get_available_years, get_available_months, get_month_date_range,
-    get_year_date_range, get_inventory_valuation  # MEJORA C
+    get_year_date_range, get_inventory_valuation, get_current_total_balance  # AGREGADO saldo
 )
 
 balance_bp = Blueprint('balance', __name__, url_prefix='/balance')
@@ -307,9 +307,11 @@ def list_ledger():
 @balance_bp.route('/ledger/new', methods=['GET'])
 def new_ledger():
     """Show form to create manual ledger entry."""
-    # Pass today's date for default
-    today = date.today().strftime('%Y-%m-%d')
-    return render_template('balance/ledger_form.html', today=today)
+    db_session = get_session()
+    # Pass current datetime for default in ISO format for datetime-local
+    now = datetime.now().strftime('%Y-%m-%dT%H:%M')
+    current_balance = get_current_total_balance(db_session)
+    return render_template('balance/ledger_form.html', now=now, current_balance=current_balance)
 
 
 @balance_bp.route('/ledger/new', methods=['POST'])
@@ -320,18 +322,22 @@ def create_ledger():
     try:
         # Get form data
         entry_type = request.form.get('type', '').upper()
-        amount_str = request.form.get('amount', '').strip()
+        amount_str = request.form.get('amount', '').replace(',', '.').strip()
         datetime_str = request.form.get('datetime', '').strip()
+        concept = request.form.get('concept', '').strip()
         category = request.form.get('category', '').strip() or None
         notes = request.form.get('notes', '').strip() or None
-        payment_method = request.form.get('payment_method', 'CASH').upper()  # MEJORA 12
+        payment_method = request.form.get('payment_method', 'CASH').upper()
         
         # Validations
+        if not concept:
+            flash('El concepto es obligatorio para movimientos manuales', 'danger')
+            return redirect(url_for('balance.new_ledger'))
+            
         if entry_type not in ['INCOME', 'EXPENSE']:
             flash('Tipo de movimiento inválido', 'danger')
             return redirect(url_for('balance.new_ledger'))
         
-        # MEJORA 12: Validate payment method
         if payment_method not in ['CASH', 'TRANSFER']:
             flash('Método de pago inválido', 'danger')
             return redirect(url_for('balance.new_ledger'))
@@ -359,8 +365,7 @@ def create_ledger():
         else:
             entry_datetime = datetime.now()
         
-        # Create ledger entry with payment_method (MEJORA 12)
-        # FIX: Normalize payment_method to ensure it's a valid string
+        # Create ledger entry
         from app.models import normalize_payment_method
         payment_method_normalized = normalize_payment_method(payment_method)
         
@@ -368,18 +373,19 @@ def create_ledger():
             datetime=entry_datetime,
             type=LedgerType[entry_type],
             amount=amount,
+            concept=concept,
             reference_type=LedgerReferenceType.MANUAL,
-            reference_id=None,  # Manual entries don't have reference_id
+            reference_id=None,
             category=category,
             notes=notes,
-            payment_method=payment_method_normalized  # MEJORA 12 FIX
+            payment_method=payment_method_normalized
         )
         
         db_session.add(ledger)
         db_session.commit()
         
         payment_label = 'Efectivo' if payment_method == 'CASH' else 'Transferencia'
-        flash(f'Movimiento manual de tipo {entry_type} por ${amount} ({payment_label}) registrado exitosamente', 'success')
+        flash(f'Movimiento manual registrado: {concept} por ${amount} ({payment_label})', 'success')
         return redirect(url_for('balance.list_ledger'))
         
     except Exception as e:

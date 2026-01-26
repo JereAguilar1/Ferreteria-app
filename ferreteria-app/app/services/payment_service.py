@@ -90,6 +90,7 @@ def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = '
             datetime=datetime.now(),
             type=LedgerType.EXPENSE,
             amount=invoice.total_amount,
+            concept=f'Pago Boleta #{invoice_number_safe}',
             reference_type=LedgerReferenceType.INVOICE_PAYMENT,
             reference_id=invoice.id,
             notes=notes_text[:500],  # Limit length to prevent issues
@@ -212,10 +213,11 @@ def add_invoice_payment(invoice_id: int, paid_at: date, amount: Decimal, session
             datetime=paid_datetime,
             type=LedgerType.EXPENSE,
             amount=amount,
+            concept=f'Pago Parcial Boleta {invoice.invoice_number}',
             reference_type=LedgerReferenceType.INVOICE_PAYMENT,
             reference_id=invoice_id,
             notes=f'Pago parcial boleta {invoice.invoice_number}' + (f' - {notes}' if notes else ''),
-            payment_method=payment_method_enum.value if payment_method_enum else 'CASH'
+            payment_method=payment_method_normalized if isinstance(payment_method_normalized, str) else payment_method_enum.value if payment_method_enum else 'CASH'
         )
         session.add(ledger_entry)
         

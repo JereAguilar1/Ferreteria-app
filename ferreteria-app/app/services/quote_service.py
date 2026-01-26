@@ -838,6 +838,7 @@ def convert_quote_to_sale(quote_id: int, session) -> int:
             datetime=sale_datetime,
             type=LedgerType.INCOME,
             amount=quote.total_amount,
+            concept=f'Venta #{sale.id}',
             category='Ventas',
             reference_type=LedgerReferenceType.SALE,
             reference_id=sale.id,

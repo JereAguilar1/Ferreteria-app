@@ -205,6 +205,7 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
             datetime=datetime.now(),
             type=LedgerType.INCOME,
             amount=sale_total,
+            concept=f'Venta #{sale.id}',
             category='Ventas',
             reference_type=LedgerReferenceType.SALE,
             reference_id=sale.id,

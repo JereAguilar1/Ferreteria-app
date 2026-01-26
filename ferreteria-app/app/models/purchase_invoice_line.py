@@ -14,6 +14,9 @@ class PurchaseInvoiceLine(Base):
     product_id = Column(BigInteger, ForeignKey('product.id'), nullable=False)
     qty = Column(Numeric(12, 3), nullable=False)
     unit_cost = Column(Numeric(14, 2), nullable=False)
+    vat_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    vat_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    net_amount = Column(Numeric(14, 2), nullable=False, default=0)
     line_total = Column(Numeric(14, 2), nullable=False)
     
     # Relationships

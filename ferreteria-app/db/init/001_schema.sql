@@ -208,9 +208,12 @@ CREATE TABLE IF NOT EXISTS purchase_invoice_line (
   invoice_id  BIGINT NOT NULL REFERENCES purchase_invoice(id) ON UPDATE RESTRICT ON DELETE CASCADE,
   product_id  BIGINT NOT NULL REFERENCES product(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   qty         NUMERIC(12,3) NOT NULL CHECK (qty > 0),
-  unit_cost   NUMERIC(14,2) NOT NULL CHECK (unit_cost >= 0), -- MEJORA 24
-  line_total  NUMERIC(14,2) NOT NULL CHECK (line_total >= 0), -- MEJORA 24
-  CONSTRAINT invoice_line_total_consistency CHECK (line_total = round(qty * unit_cost, 2))
+  unit_cost   NUMERIC(14,2) NOT NULL CHECK (unit_cost >= 0), -- Net cost
+  vat_rate    NUMERIC(5,2) NOT NULL DEFAULT 0,
+  vat_amount  NUMERIC(14,2) NOT NULL DEFAULT 0,
+  net_amount  NUMERIC(14,2) NOT NULL DEFAULT 0,
+  line_total  NUMERIC(14,2) NOT NULL CHECK (line_total >= 0), -- Total (Net + VAT)
+  CONSTRAINT invoice_line_total_consistency CHECK (line_total = round(qty * unit_cost * (1 + vat_rate/100), 2))
 );
 
 -- MEJORA B: Pagos Parciales

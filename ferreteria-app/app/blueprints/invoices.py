@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from decimal import Decimal
 from datetime import datetime, date, timedelta
+import calendar
 from sqlalchemy import and_
 from app.database import get_session
 from app.models import PurchaseInvoice, Supplier, Product, InvoiceStatus, PurchaseInvoicePayment
@@ -14,6 +15,15 @@ from app.utils.number_format import parse_ar_decimal, parse_ar_number
 invoices_bp = Blueprint('invoices', __name__, url_prefix='/invoices')
 
 
+def add_months(sourcedate, months):
+    """Add months to a date, handling month wrap and end of month."""
+    month = sourcedate.month - 1 + months
+    year = sourcedate.year + month // 12
+    month = month % 12 + 1
+    day = min(sourcedate.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
 def get_invoice_draft():
     """Get invoice draft from session."""
     if 'invoice_draft' not in session:
@@ -22,7 +32,7 @@ def get_invoice_draft():
             'invoice_number': '',
             'invoice_date': '',
             'due_date': '',
-            'lines': []  # List of {product_id, qty, unit_cost}
+            'lines': []  # List of {product_id, qty, unit_cost, vat_rate}
         }
     return session['invoice_draft']
 
@@ -324,12 +334,28 @@ def new_invoice():
         # Get or initialize draft
         draft = get_invoice_draft()
         
+        # MEJORA: Initialize dates if empty
+        today = date.today()
+        if not draft.get('invoice_date'):
+            draft['invoice_date'] = today.strftime('%Y-%m-%d')
+        
+        if not draft.get('due_date'):
+            # Default to +1 month
+            draft['due_date'] = add_months(today, 1).strftime('%Y-%m-%d')
+            
+        save_invoice_draft(draft)
+        
         # Calculate totals
         total_amount = Decimal('0.00')
         for line in draft['lines']:
             qty = Decimal(str(line['qty']))
             unit_cost = Decimal(str(line['unit_cost']))
-            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_rate = Decimal(str(line.get('vat_rate', 0)))
+            
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
+            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            
             total_amount += line_total
         total_amount = total_amount.quantize(Decimal('0.01'))
         
@@ -374,9 +400,11 @@ def add_draft_line():
         product_id = request.form.get('product_id', type=int)
         qty = request.form.get('qty', type=float, default=1)
         unit_cost_raw = request.form.get('unit_cost', '').strip()
+        vat_rate_raw = request.form.get('vat_rate', '0').strip()
         
         try:
             unit_cost_decimal = parse_ar_decimal(unit_cost_raw)
+            vat_rate_decimal = Decimal(vat_rate_raw.replace(',', '.'))
         except ValueError as e:
             flash(str(e), 'danger')
             return redirect(url_for('invoices.new_invoice'))
@@ -421,7 +449,8 @@ def add_draft_line():
             draft['lines'].append({
                 'product_id': product_id,
                 'qty': float(qty_decimal),
-                'unit_cost': float(unit_cost_decimal)
+                'unit_cost': float(unit_cost_decimal),
+                'vat_rate': float(vat_rate_decimal)
             })
         
         save_invoice_draft(draft)
@@ -503,20 +532,31 @@ def confirm_create_preview():
             
             qty = Decimal(str(line['qty']))
             unit_cost = Decimal(str(line['unit_cost']))
-            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_rate = Decimal(str(line.get('vat_rate', 0)))
+            
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
+            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            
             total_amount += line_total
             
             lines_data.append({
                 'product': product,
                 'qty': qty,
                 'unit_cost': unit_cost.quantize(Decimal('0.01')),
+                'vat_rate': vat_rate,
+                'vat_amount': vat_amount,
+                'net_amount': net_amount,
                 'line_total': line_total
             })
         
         # Parse dates for display
         try:
             invoice_date = datetime.strptime(draft['invoice_date'], '%Y-%m-%d').date()
-            due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date() if draft.get('due_date') else None
+            if draft.get('due_date'):
+                due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date()
+            else:
+                due_date = add_months(invoice_date, 1)
         except ValueError:
             return '<div class="alert alert-danger">Fecha inválida en el draft.</div>'
         
@@ -562,8 +602,15 @@ def create_invoice():
         
         # Parse dates
         try:
-            invoice_date = datetime.strptime(draft['invoice_date'], '%Y-%m-%d').date()
-            due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date() if draft['due_date'] else None
+            if draft['invoice_date']:
+                invoice_date = datetime.strptime(draft['invoice_date'], '%Y-%m-%d').date()
+            else:
+                invoice_date = date.today()
+                
+            if draft['due_date']:
+                due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date()
+            else:
+                due_date = add_months(invoice_date, 1)
         except ValueError:
             flash('Fecha inválida', 'danger')
             return redirect(url_for('invoices.new_invoice'))
@@ -574,7 +621,8 @@ def create_invoice():
             lines_payload.append({
                 'product_id': line['product_id'],
                 'qty': Decimal(str(line['qty'])),
-                'unit_cost': Decimal(str(line['unit_cost']))
+                'unit_cost': Decimal(str(line['unit_cost'])),
+                'vat_rate': Decimal(str(line.get('vat_rate', 0)))
             })
 
         payload = {

@@ -1,15 +1,18 @@
-<div class="modal fade" id="confirmCreateInvoiceModal" tabindex="-1" aria-labelledby="confirmCreateInvoiceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade" id="confirmCreateInvoiceModal" tabindex="-1" aria-labelledby="confirmCreateInvoiceModalLabel"
+    aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="confirmCreateInvoiceModalLabel">
                     <i class="bi bi-file-earmark-check"></i> Confirmar Creación de Boleta
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-info small" role="alert">
-                    <i class="bi bi-info-circle"></i> Revise los detalles antes de confirmar. Esta acción creará la boleta y aumentará el stock automáticamente.
+                    <i class="bi bi-info-circle"></i> Revise los detalles antes de confirmar. Esta acción creará la
+                    boleta y aumentará el stock automáticamente.
                 </div>
 
                 <!-- Invoice Header -->
@@ -21,18 +24,18 @@
                         <dl class="row mb-0">
                             <dt class="col-sm-4">Proveedor:</dt>
                             <dd class="col-sm-8"><strong>{{ supplier.name }}</strong></dd>
-                            
+
                             <dt class="col-sm-4">Nº Boleta:</dt>
                             <dd class="col-sm-8"><strong>{{ invoice_number }}</strong></dd>
-                            
+
                             <dt class="col-sm-4">Fecha Boleta:</dt>
                             <dd class="col-sm-8">{{ invoice_date|date_ar }}</dd>
-                            
+
                             {% if due_date %}
                             <dt class="col-sm-4">Vencimiento:</dt>
                             <dd class="col-sm-8">{{ due_date|date_ar }}</dd>
                             {% endif %}
-                            
+
                             <dt class="col-sm-4">Total:</dt>
                             <dd class="col-sm-8">
                                 <h5 class="mb-0 text-primary">${{ total_amount|money_ar_2 }}</h5>
@@ -52,8 +55,9 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th>Producto</th>
-                                        <th class="text-center">Cantidad</th>
-                                        <th class="text-end">Costo Unit.</th>
+                                        <th class="text-end">Cantidad</th>
+                                        <th class="text-end">Neto Unit.</th>
+                                        <th class="text-end">IVA</th>
                                         <th class="text-end">Subtotal</th>
                                     </tr>
                                 </thead>
@@ -64,12 +68,16 @@
                                             <strong>{{ line.product.name }}</strong>
                                             <br>
                                             <small class="text-muted">
-                                                SKU: {{ line.product.sku or '-' }} | 
+                                                SKU: {{ line.product.sku or '-' }} |
                                                 {{ line.product.uom.symbol }}
                                             </small>
                                         </td>
-                                        <td class="text-center">{{ line.qty|num_ar }}</td>
+                                        <td class="text-end">{{ line.qty|num_ar }}</td>
                                         <td class="text-end">${{ line.unit_cost|money_ar_2 }}</td>
+                                        <td class="text-end">
+                                            <small class="text-muted">({{ line.vat_rate }}%)</small><br>
+                                            ${{ line.vat_amount|money_ar_2 }}
+                                        </td>
                                         <td class="text-end"><strong>${{ line.line_total|money_ar_2 }}</strong></td>
                                     </tr>
                                     {% endfor %}
@@ -90,7 +98,8 @@
                 <!-- Stock Warning -->
                 <div class="alert alert-warning mt-3 mb-0" role="alert">
                     <i class="bi bi-exclamation-triangle-fill"></i>
-                    <strong>Importante:</strong> Al confirmar, se registrará automáticamente un <strong>INGRESO</strong> de stock para cada producto y se creará la boleta en el sistema.
+                    <strong>Importante:</strong> Al confirmar, se registrará automáticamente un <strong>INGRESO</strong>
+                    de stock para cada producto y se creará la boleta en el sistema.
                 </div>
 
             </div>
@@ -98,11 +107,9 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle"></i> Cancelar
                 </button>
-                
+
                 <form method="POST" action="{{ url_for('invoices.create_invoice') }}" id="confirmCreateForm">
-                    <button type="submit" 
-                            class="btn btn-primary"
-                            id="confirmCreateBtn">
+                    <button type="submit" class="btn btn-primary" id="confirmCreateBtn">
                         <i class="bi bi-check-circle"></i> Confirmar Creación
                     </button>
                 </form>
@@ -112,27 +119,27 @@
 </div>
 
 <script>
-// Auto-open the modal when it's inserted into the DOM
-(function() {
-    const modalElement = document.getElementById('confirmCreateInvoiceModal');
-    if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-        
-        // Disable button on submit to prevent double-click
-        const form = document.getElementById('confirmCreateForm');
-        const btn = document.getElementById('confirmCreateBtn');
-        if (form && btn) {
-            form.addEventListener('submit', function() {
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Procesando...';
+    // Auto-open the modal when it's inserted into the DOM
+    (function () {
+        const modalElement = document.getElementById('confirmCreateInvoiceModal');
+        if (modalElement) {
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+
+            // Disable button on submit to prevent double-click
+            const form = document.getElementById('confirmCreateForm');
+            const btn = document.getElementById('confirmCreateBtn');
+            if (form && btn) {
+                form.addEventListener('submit', function () {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Procesando...';
+                });
+            }
+
+            // Optional: Remove modal from DOM after it's hidden
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                modalElement.remove();
             });
         }
-        
-        // Optional: Remove modal from DOM after it's hidden
-        modalElement.addEventListener('hidden.bs.modal', function () {
-            modalElement.remove();
-        });
-    }
-})();
+    })();
 </script>

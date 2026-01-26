@@ -107,14 +107,26 @@ def create_invoice_with_lines(payload: dict, session) -> int:
             except (TypeError, ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Costo unitario inválido para "{product.name}"')
             
-            # Calculate line total
-            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
+            try:
+                vat_rate = Decimal(str(line.get('vat_rate', 0)))
+                if vat_rate < 0:
+                    raise ValueError(f'La alícuota de IVA no puede ser negativa para "{product.name}"')
+            except (TypeError, ValueError, decimal.InvalidOperation):
+                raise ValueError(f'Alícuota de IVA inválida para "{product.name}"')
+            
+            # Calculate line totals
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
+            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
             
             validated_lines.append({
                 'product_id': product_id,
                 'product': product,
                 'qty': qty,
                 'unit_cost': unit_cost,
+                'vat_rate': vat_rate,
+                'vat_amount': vat_amount,
+                'net_amount': net_amount,
                 'line_total': line_total
             })
             
@@ -152,6 +164,9 @@ def create_invoice_with_lines(payload: dict, session) -> int:
                 product_id=line_data['product_id'],
                 qty=line_data['qty'],
                 unit_cost=line_data['unit_cost'],
+                vat_rate=line_data['vat_rate'],
+                vat_amount=line_data['vat_amount'],
+                net_amount=line_data['net_amount'],
                 line_total=line_data['line_total']
             )
             session.add(invoice_line)
@@ -310,14 +325,26 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
             except (TypeError, ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Costo unitario inválido para "{product.name}"')
             
-            # Calculate line total
-            line_total = (qty * unit_cost).quantize(Decimal('0.01'))
+            try:
+                vat_rate = Decimal(str(line.get('vat_rate', 0)))
+                if vat_rate < 0:
+                    raise ValueError(f'La alícuota de IVA no puede ser negativa para "{product.name}"')
+            except (TypeError, ValueError, decimal.InvalidOperation):
+                raise ValueError(f'Alícuota de IVA inválida para "{product.name}"')
+            
+            # Calculate line totals
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
+            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
+            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
             
             line_data = {
                 'product_id': product_id,
                 'product': product,
                 'qty': qty,
                 'unit_cost': unit_cost,
+                'vat_rate': vat_rate,
+                'vat_amount': vat_amount,
+                'net_amount': net_amount,
                 'line_total': line_total
             }
             
@@ -417,6 +444,9 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
                 product_id=line_data['product_id'],
                 qty=line_data['qty'],
                 unit_cost=line_data['unit_cost'],
+                vat_rate=line_data['vat_rate'],
+                vat_amount=line_data['vat_amount'],
+                net_amount=line_data['net_amount'],
                 line_total=line_data['line_total']
             )
             session.add(invoice_line)

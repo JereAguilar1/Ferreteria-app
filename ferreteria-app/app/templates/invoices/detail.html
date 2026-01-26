@@ -70,7 +70,8 @@
     <div class="col-md-6">
         <!-- MEJORA B: Balance Card (Total, Pagado, Saldo) -->
         <div class="card mb-3">
-            <div class="card-header {% if balance_info.is_fully_paid %}bg-success{% else %}bg-warning text-dark{% endif %}">
+            <div
+                class="card-header {% if balance_info.is_fully_paid %}bg-success{% else %}bg-warning text-dark{% endif %}">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-calculator"></i> Balance
                 </h5>
@@ -81,14 +82,14 @@
                     <dd class="col-sm-7 text-end">
                         <h4 class="mb-0">${{ balance_info.total_amount|money_ar_2 }}</h4>
                     </dd>
-                    
+
                     <dt class="col-sm-5">Pagado:</dt>
                     <dd class="col-sm-7 text-end">
                         <span class="{% if balance_info.total_paid > 0 %}text-success{% else %}text-muted{% endif %}">
                             ${{ balance_info.total_paid|money_ar_2 }}
                         </span>
                     </dd>
-                    
+
                     <dt class="col-sm-5">Saldo:</dt>
                     <dd class="col-sm-7 text-end">
                         <h4 class="mb-0 {% if balance_info.balance == 0 %}text-success{% else %}text-danger{% endif %}">
@@ -96,7 +97,7 @@
                         </h4>
                     </dd>
                 </dl>
-                
+
                 {% if balance_info.is_fully_paid %}
                 <div class="alert alert-success mt-3 mb-0 small">
                     <i class="bi bi-check-circle-fill"></i> Boleta pagada completamente
@@ -120,24 +121,23 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" 
-                           class="btn btn-outline-primary w-100">
+                        <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}"
+                            class="btn btn-outline-primary w-100">
                             <i class="bi bi-pencil"></i> Editar Boleta
                         </a>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <button type="button" 
-                                class="btn btn-outline-danger w-100"
-                                hx-get="{{ url_for('invoices.delete_invoice_preview', invoice_id=invoice.id) }}"
-                                hx-target="#invoice-modal-container"
-                                hx-swap="innerHTML">
+                        <button type="button" class="btn btn-outline-danger w-100"
+                            hx-get="{{ url_for('invoices.delete_invoice_preview', invoice_id=invoice.id) }}"
+                            hx-target="#invoice-modal-container" hx-swap="innerHTML">
                             <i class="bi bi-trash"></i> Eliminar Boleta
                         </button>
                     </div>
                 </div>
                 <small class="text-muted d-block mt-2">
                     <i class="bi bi-info-circle"></i>
-                    Estas opciones solo están disponibles para boletas pendientes. Al editar o eliminar, el stock se ajustará automáticamente.
+                    Estas opciones solo están disponibles para boletas pendientes. Al editar o eliminar, el stock se
+                    ajustará automáticamente.
                 </small>
             </div>
         </div>
@@ -201,7 +201,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Add Payment Form & Due Date -->
     <div class="col-md-5">
         {% if not balance_info.is_fully_paid %}
@@ -218,35 +218,24 @@
                         <label for="paid_at" class="form-label">
                             Fecha de Pago <span class="text-danger">*</span>
                         </label>
-                        <input type="date" 
-                               class="form-control" 
-                               id="paid_at" 
-                               name="paid_at" 
-                               value="{{ today }}"
-                               required>
+                        <input type="date" class="form-control" id="paid_at" name="paid_at" value="{{ today }}"
+                            required>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="amount" class="form-label">
                             Monto <span class="text-danger">*</span>
                         </label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="amount" 
-                                   name="amount" 
-                                   step="0.01"
-                                   min="0.01"
-                                   max="{{ balance_info.balance }}"
-                                   value="{{ balance_info.balance }}"
-                                   required>
+                            <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01"
+                                max="{{ balance_info.balance }}" value="{{ balance_info.balance }}" required>
                         </div>
                         <small class="text-muted">
                             Saldo pendiente: ${{ balance_info.balance|money_ar_2 }}
                         </small>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="payment_method" class="form-label">Método de Pago</label>
                         <select class="form-select" id="payment_method" name="payment_method">
@@ -254,16 +243,13 @@
                             <option value="TRANSFER">Transferencia</option>
                         </select>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notas (opcional)</label>
-                        <input type="text" 
-                               class="form-control" 
-                               id="notes" 
-                               name="notes"
-                               placeholder="Ej: Adelanto, Pago parcial 1/3">
+                        <input type="text" class="form-control" id="notes" name="notes"
+                            placeholder="Ej: Adelanto, Pago parcial 1/3">
                     </div>
-                    
+
                     <button type="submit" class="btn btn-success w-100">
                         <i class="bi bi-check-circle"></i> Registrar Pago
                     </button>
@@ -286,7 +272,7 @@
             </p>
         </div>
         {% endif %}
-        
+
         <!-- Update Due Date Form 
         <div class="card border-secondary">
             <div class="card-header bg-secondary text-white">
@@ -330,10 +316,10 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Producto</th>
-                                <th>SKU</th>
                                 <th>UOM</th>
                                 <th class="text-end">Cantidad</th>
-                                <th class="text-end">Costo Unitario</th>
+                                <th class="text-end">Neto Unit.</th>
+                                <th class="text-end">IVA</th>
                                 <th class="text-end">Subtotal</th>
                             </tr>
                         </thead>
@@ -341,10 +327,13 @@
                             {% for line in invoice.lines %}
                             <tr>
                                 <td><strong>{{ line.product.name }}</strong></td>
-                                <td>{{ line.product.sku or '-' }}</td>
-                                <td><span class="badge bg-info">{{ line.product.uom.symbol }}</span></td>
-                                <td class="text-end">{{ line.qty|num_ar(3) }}</td>
+                                <td>{{ line.product.uom.symbol if line.product.uom else '-' }}</td>
+                                <td class="text-end">{{ line.qty|num_ar }}</td>
                                 <td class="text-end">${{ line.unit_cost|money_ar_2 }}</td>
+                                <td class="text-end">
+                                    <small class="text-muted">({{ line.vat_rate }}%)</small><br>
+                                    ${{ line.vat_amount|money_ar_2 }}
+                                </td>
                                 <td class="text-end"><strong>${{ line.line_total|money_ar_2 }}</strong></td>
                             </tr>
                             {% endfor %}
@@ -368,5 +357,3 @@
 <div id="invoice-modal-container"></div>
 
 {% endblock %}
-
-

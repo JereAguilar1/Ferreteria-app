@@ -9,8 +9,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-ferreteria}
       POSTGRES_USER: ${DB_USER:-ferreteria}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-ferreteria}
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    #ports:
+    #  - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro

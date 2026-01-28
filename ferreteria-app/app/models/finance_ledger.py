@@ -75,6 +75,8 @@ class FinanceLedger(Base):
     reference_id = Column(BigInteger, nullable=True)
     notes = Column(Text, nullable=True)
     payment_method = Column(String(20), nullable=False, default='CASH', server_default='CASH')  # MEJORA 12
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     
     def __repr__(self):
         return f"<FinanceLedger(id={self.id}, type={self.type.value}, amount={self.amount})>"

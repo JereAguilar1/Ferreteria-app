@@ -603,8 +603,9 @@ def quote_pdf():
         # Generate PDF
         pdf_buffer = generate_quote_pdf(cart_with_details, business_info)
         
-        # Generate filename with timestamp
-        filename = f"presupuesto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        # Generate filename with timestamp (Argentina)
+        from app.utils.formatters import get_now_ar
+        filename = f"presupuesto_{get_now_ar().strftime('%Y%m%d_%H%M%S')}.pdf"
         
         # Return PDF as download
         return send_file(

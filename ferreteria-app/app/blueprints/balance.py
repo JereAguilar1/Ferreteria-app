@@ -257,8 +257,8 @@ def list_ledger():
             flash('Método de pago inválido. Mostrando todos.', 'info')
             method = 'all'
         
-        # Build query
-        query = db_session.query(FinanceLedger)
+        # Build query (exclude soft-deleted)
+        query = db_session.query(FinanceLedger).filter(FinanceLedger.deleted_at.is_(None))
         
         # Filter by type
         if entry_type and entry_type in ['INCOME', 'EXPENSE']:
@@ -272,10 +272,14 @@ def list_ledger():
         # if 'all', no filter applied
         
         # Filter by date range
+        # MEJORA TZ: Use local time for range comparison in DB
+        from sqlalchemy import func
+        local_dt_col = func.timezone('America/Argentina/Buenos_Aires', FinanceLedger.datetime)
+
         if start_str:
             try:
                 start_dt = datetime.strptime(start_str, '%Y-%m-%d')
-                query = query.filter(FinanceLedger.datetime >= start_dt)
+                query = query.filter(local_dt_col >= start_dt)
             except ValueError:
                 pass
         
@@ -283,7 +287,7 @@ def list_ledger():
             try:
                 end_dt = datetime.strptime(end_str, '%Y-%m-%d')
                 end_dt = end_dt.replace(hour=23, minute=59, second=59)
-                query = query.filter(FinanceLedger.datetime <= end_dt)
+                query = query.filter(local_dt_col <= end_dt)
             except ValueError:
                 pass
         
@@ -308,10 +312,12 @@ def list_ledger():
 def new_ledger():
     """Show form to create manual ledger entry."""
     db_session = get_session()
-    # Pass current datetime for default in ISO format for datetime-local
-    now = datetime.now().strftime('%Y-%m-%dT%H:%M')
+    # Pass current datetime in Argentina for default
+    from app.utils.formatters import get_now_ar
+    now_ar = get_now_ar()
+    now_str = now_ar.strftime('%Y-%m-%dT%H:%M')
     current_balance = get_current_total_balance(db_session)
-    return render_template('balance/ledger_form.html', now=now, current_balance=current_balance)
+    return render_template('balance/ledger_form.html', now=now_str, current_balance=current_balance, is_edit=False)
 
 
 @balance_bp.route('/ledger/new', methods=['POST'])
@@ -356,14 +362,19 @@ def create_ledger():
             return redirect(url_for('balance.new_ledger'))
         
         # Parse datetime
+        from app.utils.formatters import get_now_ar, ar_to_utc
         if datetime_str:
             try:
-                entry_datetime = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M')
+                # User enters local AR time in the browser
+                entry_datetime_naive = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M')
+                # Convert to UTC for storage
+                entry_datetime = ar_to_utc(entry_datetime_naive)
             except ValueError:
                 flash('Formato de fecha/hora inválido', 'danger')
                 return redirect(url_for('balance.new_ledger'))
         else:
-            entry_datetime = datetime.now()
+            # Default to now AR converted to UTC
+            entry_datetime = ar_to_utc(get_now_ar())
         
         # Create ledger entry
         from app.models import normalize_payment_method
@@ -393,3 +404,151 @@ def create_ledger():
         flash(f'Error al crear movimiento: {str(e)}', 'danger')
         return redirect(url_for('balance.new_ledger'))
 
+@balance_bp.route('/ledger/<int:ledger_id>/edit', methods=['GET'])
+def edit_ledger(ledger_id):
+    """Show form to edit manual ledger entry."""
+    db_session = get_session()
+    
+    ledger = db_session.query(FinanceLedger).filter(
+        FinanceLedger.id == ledger_id,
+        FinanceLedger.deleted_at.is_(None)
+    ).first()
+    
+    if not ledger:
+        flash('Movimiento no encontrado', 'danger')
+        return redirect(url_for('balance.list_ledger'))
+    
+    # Validate it's a manual entry (no reference_id)
+    if ledger.reference_type != LedgerReferenceType.MANUAL or ledger.reference_id is not None:
+        flash('Solo se pueden editar movimientos manuales puros. Los movimientos vinculados a ventas o boletas no son editables desde aquí.', 'warning')
+        return redirect(url_for('balance.list_ledger'))
+    
+    # Format datetime for input field (Argentina local time)
+    from app.utils.formatters import to_argentina
+    dt_ar = to_argentina(ledger.datetime)
+    now_str = dt_ar.strftime('%Y-%m-%dT%H:%M')
+    
+    current_balance = get_current_total_balance(db_session)
+    
+    return render_template('balance/ledger_form.html', 
+                         ledger=ledger, 
+                         now=now_str, 
+                         current_balance=current_balance,
+                         is_edit=True)
+
+
+@balance_bp.route('/ledger/<int:ledger_id>/edit', methods=['POST'])
+def update_ledger(ledger_id):
+    """Update manual ledger entry."""
+    db_session = get_session()
+    
+    try:
+        ledger = db_session.query(FinanceLedger).filter(
+            FinanceLedger.id == ledger_id,
+            FinanceLedger.deleted_at.is_(None)
+        ).first()
+        
+        if not ledger:
+            flash('Movimiento no encontrado', 'danger')
+            return redirect(url_for('balance.list_ledger'))
+        
+        # Validate it's a manual entry
+        if ledger.reference_type != LedgerReferenceType.MANUAL or ledger.reference_id is not None:
+            flash('Solo se pueden editar movimientos manuales.', 'danger')
+            return redirect(url_for('balance.list_ledger'))
+            
+        # Get form data
+        entry_type = request.form.get('type', '').upper()
+        amount_str = request.form.get('amount', '').replace(',', '.').strip()
+        datetime_str = request.form.get('datetime', '').strip()
+        concept = request.form.get('concept', '').strip()
+        category = request.form.get('category', '').strip() or None
+        notes = request.form.get('notes', '').strip() or None
+        payment_method = request.form.get('payment_method', 'CASH').upper()
+        
+        # Validations
+        if not concept:
+            flash('El concepto es obligatorio', 'danger')
+            return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+            
+        if entry_type not in ['INCOME', 'EXPENSE']:
+            flash('Tipo de movimiento inválido', 'danger')
+            return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+        
+        if not amount_str:
+            flash('El monto es requerido', 'danger')
+            return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+        
+        try:
+            amount = Decimal(amount_str)
+            if amount <= 0:
+                flash('El monto debe ser mayor a 0', 'danger')
+                return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+        except (ValueError, decimal.InvalidOperation):
+            flash('Monto inválido', 'danger')
+            return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+            
+        # Parse datetime
+        from app.utils.formatters import get_now_ar, ar_to_utc
+        if datetime_str:
+            try:
+                entry_datetime_naive = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M')
+                entry_datetime = ar_to_utc(entry_datetime_naive)
+            except ValueError:
+                flash('Formato de fecha/hora inválido', 'danger')
+                return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+        else:
+            entry_datetime = ar_to_utc(get_now_ar())
+            
+        # Update ledger entry
+        from app.models import normalize_payment_method
+        ledger.type = LedgerType[entry_type]
+        ledger.amount = amount
+        ledger.datetime = entry_datetime
+        ledger.concept = concept
+        ledger.category = category
+        ledger.notes = notes
+        ledger.payment_method = normalize_payment_method(payment_method)
+        
+        db_session.commit()
+        flash(f'Movimiento #{ledger.id} actualizado correctamente.', 'success')
+        return redirect(url_for('balance.list_ledger'))
+        
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error al actualizar movimiento: {str(e)}', 'danger')
+        return redirect(url_for('balance.edit_ledger', ledger_id=ledger_id))
+
+
+@balance_bp.route('/ledger/<int:ledger_id>/delete', methods=['POST'])
+def delete_ledger(ledger_id):
+    """Soft delete manual ledger entry."""
+    db_session = get_session()
+    
+    try:
+        ledger = db_session.query(FinanceLedger).filter(
+            FinanceLedger.id == ledger_id,
+            FinanceLedger.deleted_at.is_(None)
+        ).first()
+        
+        if not ledger:
+            flash('Movimiento no encontrado', 'danger')
+            return redirect(url_for('balance.list_ledger'))
+        
+        # Validate it's a manual entry (no reference_id)
+        if ledger.reference_type != LedgerReferenceType.MANUAL or ledger.reference_id is not None:
+            flash('Solo se pueden eliminar movimientos manuales.', 'danger')
+            return redirect(url_for('balance.list_ledger'))
+        
+        # Soft delete
+        from app.utils.formatters import ar_to_utc, get_now_ar
+        ledger.deleted_at = ar_to_utc(get_now_ar())
+        
+        db_session.commit()
+        flash(f'Movimiento manual #{ledger_id} eliminado exitosamente.', 'success')
+        
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error al eliminar movimiento: {str(e)}', 'danger')
+        
+    return redirect(url_for('balance.list_ledger'))

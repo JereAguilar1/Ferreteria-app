@@ -33,8 +33,26 @@ def to_argentina(dt: Union[datetime, None]) -> Union[datetime, None]:
         from datetime import timezone
         dt = dt.replace(tzinfo=timezone.utc)
     
-    # Convertir a zona horaria argentina
+# Convertir a zona horaria argentina
     return dt.astimezone(ZoneInfo("America/Argentina/Buenos_Aires"))
+
+
+def get_now_ar() -> datetime:
+    """
+    Obtiene la fecha y hora actual en la zona horaria de Argentina.
+    """
+    from datetime import timezone
+    return datetime.now(timezone.utc).astimezone(ZoneInfo("America/Argentina/Buenos_Aires"))
+
+
+def ar_to_utc(dt: datetime) -> datetime:
+    """
+    Convierte un datetime (que se asume está en hora de Argentina si es naive) a UTC.
+    """
+    from datetime import timezone
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo("America/Argentina/Buenos_Aires"))
+    return dt.astimezone(timezone.utc)
 
 
 def num_ar(value: Union[int, float, Decimal, str, None], decimals: Optional[int] = None) -> str:

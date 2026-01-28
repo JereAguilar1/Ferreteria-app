@@ -105,9 +105,11 @@ def generate_quote_pdf(cart: dict, business_info: dict) -> BytesIO:
     
     elements.append(Spacer(1, 0.3*inch))
     
-    # Quote number and date
-    quote_number = f"PRES-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    current_date = datetime.now().strftime('%d/%m/%Y')
+    # Quote number and date (Argentina)
+    from app.utils.formatters import get_now_ar
+    now_ar = get_now_ar()
+    quote_number = f"PRES-{now_ar.strftime('%Y%m%d-%H%M%S')}"
+    current_date = now_ar.strftime('%d/%m/%Y')
     
     quote_info_data = [
         ['Presupuesto N°:', quote_number],
@@ -279,11 +281,16 @@ def generate_quote_number(session) -> str:
     Returns:
         str: Unique quote number
     """
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    from app.utils.formatters import get_now_ar
+    now_ar = get_now_ar()
+    timestamp = now_ar.strftime('%Y%m%d-%H%M%S')
     
-    # Get count of quotes created today to generate sequence
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    count = session.query(Quote).filter(Quote.created_at >= today_start).count()
+    # Get count of quotes created today in Argentina to generate sequence
+    today_start_ar = now_ar.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Convert back to UTC for DB query
+    from app.utils.formatters import ar_to_utc
+    today_start_utc = ar_to_utc(today_start_ar)
+    count = session.query(Quote).filter(Quote.created_at >= today_start_utc).count()
     
     sequence = str(count + 1).zfill(4)
     quote_number = f"PRES-{timestamp}-{sequence}"
@@ -328,8 +335,10 @@ def create_quote_from_cart(cart: dict, session, customer_name: str, customer_pho
         quote_number = generate_quote_number(session)
         
         # Calculate valid_until date
-        issued_at = datetime.now()
-        valid_until = (issued_at.date() + timedelta(days=valid_days))
+        from app.utils.formatters import get_now_ar, ar_to_utc
+        issued_at_ar = get_now_ar()
+        issued_at = ar_to_utc(issued_at_ar)
+        valid_until = (issued_at_ar.date() + timedelta(days=valid_days))
         
         # Ensure payment_method is None if empty string
         if payment_method == '':
@@ -782,7 +791,8 @@ def convert_quote_to_sale(quote_id: int, session) -> int:
                 )
         
         # Step 4: Create sale
-        sale_datetime = datetime.now()
+        from app.utils.formatters import get_now_ar, ar_to_utc
+        sale_datetime = ar_to_utc(get_now_ar())
         
         sale = Sale(
             datetime=sale_datetime,

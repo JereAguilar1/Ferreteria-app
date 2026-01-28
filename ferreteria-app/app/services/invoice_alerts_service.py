@@ -21,7 +21,8 @@ def get_invoice_alert_counts(session, today: date = None):
             - total_critical: int
     """
     if today is None:
-        today = date.today()
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
     
     tomorrow = today + timedelta(days=1)
     
@@ -61,7 +62,8 @@ def is_invoice_overdue(invoice, today: date = None):
         bool: True if invoice is overdue
     """
     if today is None:
-        today = date.today()
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
     
     return (
         invoice.status == InvoiceStatus.PENDING and
@@ -82,7 +84,8 @@ def is_invoice_due_tomorrow(invoice, today: date = None):
         bool: True if invoice is due tomorrow
     """
     if today is None:
-        today = date.today()
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
     
     tomorrow = today + timedelta(days=1)
     

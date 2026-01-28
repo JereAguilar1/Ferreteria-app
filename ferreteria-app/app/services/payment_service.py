@@ -77,6 +77,12 @@ def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = '
         session.flush()  # Ensure invoice is updated before creating ledger entry
         
         # Step 5: Create finance_ledger entry (EXPENSE) with payment_method (MEJORA 12)
+        from app.utils.formatters import get_now_ar, ar_to_utc
+        
+        # Convert paid_at (date) to datetime representing Argentina midnight, then to UTC
+        paid_datetime_naive = datetime.combine(paid_at, datetime.min.time())
+        paid_datetime_utc = ar_to_utc(paid_datetime_naive)
+        
         # FIX: Normalize payment_method to ensure it's a valid string
         from app.models import normalize_payment_method
         payment_method_normalized = normalize_payment_method(payment_method)
@@ -87,7 +93,7 @@ def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = '
         notes_text = f'Pago boleta #{invoice_number_safe} - {supplier_name_safe}'
         
         ledger_entry = FinanceLedger(
-            datetime=datetime.now(),
+            datetime=paid_datetime_utc, # Use the converted paid_at for the ledger entry
             type=LedgerType.EXPENSE,
             amount=invoice.total_amount,
             concept=f'Pago Boleta #{invoice_number_safe}',
@@ -206,8 +212,10 @@ def add_invoice_payment(invoice_id: int, paid_at: date, amount: Decimal, session
         else:
             payment_method_enum = None
         
-        # Convert date to datetime for ledger
-        paid_datetime = datetime.combine(paid_at, datetime.min.time())
+        # Convert date to datetime for ledger (treat as Argentina midnight and convert to UTC)
+        from app.utils.formatters import ar_to_utc
+        paid_datetime_naive = datetime.combine(paid_at, datetime.min.time())
+        paid_datetime = ar_to_utc(paid_datetime_naive)
         
         ledger_entry = FinanceLedger(
             datetime=paid_datetime,

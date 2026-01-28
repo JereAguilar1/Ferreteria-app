@@ -86,6 +86,7 @@
                         <th>Ref ID</th>
                         <th>Categoría</th>
                         <th>Notas</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -131,6 +132,53 @@
                         <td>{{ entry.category or '-' }}</td>
                         <td>
                             <small>{{ entry.notes or '-' }}</small>
+                        </td>
+                        <td class="text-center">
+                            {% if entry.reference_type.value == 'MANUAL' and not entry.reference_id %}
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('balance.edit_ledger', ledger_id=entry.id) }}"
+                                    class="btn btn-outline-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" title="Eliminar"
+                                    data-bs-toggle="modal" data-bs-target="#deleteModal{{ entry.id }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+
+                            <!-- Delete Confirmation Modal -->
+                            <div class="modal fade" id="deleteModal{{ entry.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title">Confirmar Eliminación</h5>
+                                            <button type="button" class="btn-close btn-close-white"
+                                                data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body text-start">
+                                            <p>¿Está seguro que desea eliminar el movimiento manual <strong>#{{ entry.id
+                                                    }}</strong>?</p>
+                                            <p><strong>Concepto:</strong> {{ entry.concept }}</p>
+                                            <p><strong>Monto:</strong> ${{ "%.2f"|format(entry.amount) }}</p>
+                                            <p class="text-danger small">Esta acción no se puede deshacer (se marcará
+                                                como eliminado).</p>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary"
+                                                data-bs-dismiss="modal">Cancelar</button>
+                                            <form action="{{ url_for('balance.delete_ledger', ledger_id=entry.id) }}"
+                                                method="POST">
+                                                <button type="submit" class="btn btn-danger">Eliminar
+                                                    Movimiento</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted small" title="Los movimientos automáticos no se pueden editar"><i
+                                    class="bi bi-lock"></i></span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

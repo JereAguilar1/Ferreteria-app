@@ -109,7 +109,8 @@ def list_invoices():
         
         # MEJORA 21: Calculate "overdue" status for each invoice
         # MEJORA B: Calculate balance (total_paid, balance) for each invoice
-        today = date.today()
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
         for invoice in invoices:
             invoice.is_overdue = is_invoice_overdue(invoice, today)
             
@@ -167,7 +168,8 @@ def view_invoice(invoice_id):
             return redirect(url_for('invoices.list_invoices'))
         
         # MEJORA 21: Calculate overdue status
-        today_date = date.today()
+        from app.utils.formatters import get_now_ar
+        today_date = get_now_ar().date()
         invoice.is_overdue = is_invoice_overdue(invoice, today_date)
         
         # MEJORA B: Calculate balance (total - sum of payments)
@@ -334,8 +336,9 @@ def new_invoice():
         # Get or initialize draft
         draft = get_invoice_draft()
         
-        # MEJORA: Initialize dates if empty
-        today = date.today()
+        # MEJORA: Initialize dates if empty (Argentina)
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
         if not draft.get('invoice_date'):
             draft['invoice_date'] = today.strftime('%Y-%m-%d')
         
@@ -605,7 +608,8 @@ def create_invoice():
             if draft['invoice_date']:
                 invoice_date = datetime.strptime(draft['invoice_date'], '%Y-%m-%d').date()
             else:
-                invoice_date = date.today()
+                from app.utils.formatters import get_now_ar
+                invoice_date = get_now_ar().date()
                 
             if draft['due_date']:
                 due_date = datetime.strptime(draft['due_date'], '%Y-%m-%d').date()
@@ -666,8 +670,9 @@ def pay_invoice_preview(invoice_id):
         if invoice.status != InvoiceStatus.PENDING:
             return f'<div class="alert alert-danger">Solo se pueden pagar boletas PENDING. Estado actual: {invoice.status.value}</div>'
         
-        # Pass today's date for default
-        today = date.today().strftime('%Y-%m-%d')
+        # Pass today's date for default (Argentina)
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date().strftime('%Y-%m-%d')
         
         return render_template('invoices/_pay_confirm_modal.html',
                              invoice=invoice,

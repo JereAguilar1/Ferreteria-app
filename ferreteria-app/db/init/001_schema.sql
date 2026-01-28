@@ -260,7 +260,9 @@ CREATE TABLE IF NOT EXISTS finance_ledger (
   reference_type ledger_ref_type NOT NULL,
   reference_id   BIGINT,
   notes          TEXT,
-  payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH' CHECK (payment_method IN ('CASH', 'TRANSFER')) -- MEJORA 12
+  payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH' CHECK (payment_method IN ('CASH', 'TRANSFER')), -- MEJORA 12
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at     TIMESTAMPTZ
 );
 
 -- =========================
@@ -528,6 +530,13 @@ CREATE TRIGGER quote_set_updated_at
     BEFORE UPDATE ON quote
     FOR EACH ROW
     EXECUTE FUNCTION trg_quote_set_updated_at();
+
+-- Trigger for finance_ledger updated_at
+DROP TRIGGER IF EXISTS finance_ledger_set_updated_at ON finance_ledger;
+CREATE TRIGGER finance_ledger_set_updated_at
+    BEFORE UPDATE ON finance_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION trg_set_updated_at();
 
 -- =========================
 -- SINGLE BASE UOM CONSTRAINT (MEJORA A + FIX)

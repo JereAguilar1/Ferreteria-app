@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Nuevo Movimiento Manual - Sistema Ferretería{% endblock %}
+{% block title %}{% if is_edit %}Editar Movimiento #{{ ledger.id }}{% else %}Nuevo Movimiento Manual{% endif %} -
+Sistema Ferretería{% endblock %}
 
 {% block content %}
 <div class="row mb-3">
     <div class="col">
         <h1 class="h2">
-            <i class="bi bi-plus-circle"></i> Nuevo Movimiento Manual
+            <i class="bi bi-{% if is_edit %}pencil{% else %}plus-circle{% endif %}"></i>
+            {% if is_edit %}Editar Movimiento #{{ ledger.id }}{% else %}Nuevo Movimiento Manual{% endif %}
         </h1>
     </div>
     <div class="col text-end">
@@ -23,14 +25,16 @@
                 <h5 class="card-title mb-0">Datos del Movimiento</h5>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('balance.create_ledger') }}">
+                <form method="POST"
+                    action="{% if is_edit %}{{ url_for('balance.update_ledger', ledger_id=ledger.id) }}{% else %}{{ url_for('balance.create_ledger') }}{% endif %}">
                     <!-- Concept -->
                     <div class="mb-3">
                         <label for="concept" class="form-label">
                             Concepto <span class="text-danger">*</span>
                         </label>
                         <input type="text" class="form-control" id="concept" name="concept" maxlength="255" required
-                            placeholder="Ej: Pago de servicios, Retiro de caja, etc.">
+                            placeholder="Ej: Pago de servicios, Retiro de caja, etc."
+                            value="{{ ledger.concept if is_edit else '' }}">
                         <div class="form-text">
                             Breve descripción del motivo del movimiento
                         </div>
@@ -43,8 +47,10 @@
                         </label>
                         <select class="form-select" id="type" name="type" required>
                             <option value="">Seleccione...</option>
-                            <option value="INCOME">Ingreso</option>
-                            <option value="EXPENSE">Egreso</option>
+                            <option value="INCOME" {% if is_edit and ledger.type.value=='INCOME' %}selected{% endif %}>
+                                Ingreso</option>
+                            <option value="EXPENSE" {% if is_edit and ledger.type.value=='EXPENSE' %}selected{% endif
+                                %}>Egreso</option>
                         </select>
                         <div id="balance-info" class="form-text mt-2" style="display: none;">
                             <span class="badge bg-info text-dark">
@@ -59,8 +65,10 @@
                             Método de Pago/Cobro <span class="text-danger">*</span>
                         </label>
                         <select class="form-select" id="payment_method" name="payment_method" required>
-                            <option value="CASH" selected>Efectivo</option>
-                            <option value="TRANSFER">Transferencia</option>
+                            <option value="CASH" {% if is_edit and ledger.payment_method=='CASH' %}selected{% elif not
+                                is_edit %}selected{% endif %}>Efectivo</option>
+                            <option value="TRANSFER" {% if is_edit and ledger.payment_method=='TRANSFER' %}selected{%
+                                endif %}>Transferencia</option>
                         </select>
                     </div>
 
@@ -72,7 +80,7 @@
                         <div class="input-group">
                             <span class="input-group-text">$</span>
                             <input type="number" class="form-control" id="amount" name="amount" min="0.01" step="0.01"
-                                required>
+                                required value="{{ ledger.amount if is_edit else '' }}">
                         </div>
                         <div id="amount-warning" class="text-danger small mt-1" style="display: none;">
                             El monto excede el saldo disponible.
@@ -92,13 +100,15 @@
                     <div class="mb-3">
                         <label for="category" class="form-label">Categoría (Opcional)</label>
                         <input type="text" class="form-control" id="category" name="category" maxlength="100"
-                            placeholder="Ej: Servicios, Impuestos, etc.">
+                            placeholder="Ej: Servicios, Impuestos, etc."
+                            value="{{ ledger.category if is_edit and ledger.category else '' }}">
                     </div>
 
                     <!-- Notes -->
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notas (Opcional)</label>
-                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        <textarea class="form-control" id="notes" name="notes"
+                            rows="2">{{ ledger.notes if is_edit and ledger.notes else '' }}</textarea>
                         <div id="balance-info" class="form-text mt-2">
                             <i class="bi bi-info-circle"></i> Los movimientos manuales pueden representar fondos
                             externos.
@@ -111,7 +121,8 @@
                             <i class="bi bi-x-circle"></i> Cancelar
                         </a>
                         <button type="submit" id="submit-btn" class="btn btn-success">
-                            <i class="bi bi-save"></i> Registrar Movimiento
+                            <i class="bi bi-save"></i> {% if is_edit %}Guardar Cambios{% else %}Registrar Movimiento{%
+                            endif %}
                         </button>
                     </div>
                 </form>
@@ -123,7 +134,7 @@
 
                         form.addEventListener('submit', function () {
                             submitBtn.disabled = true;
-                            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Registrando...';
+                            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' + (form.getAttribute('action').includes('edit') ? 'Guardando...' : 'Registrando...');
                         });
                     });
                 </script>

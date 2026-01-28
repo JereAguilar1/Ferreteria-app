@@ -53,7 +53,8 @@ def list_quotes():
         quotes = query.order_by(Quote.issued_at.desc()).all()
         
         # Calculate "expired" status for display
-        today = date.today()
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
         for quote in quotes:
             if quote.status in ['DRAFT', 'SENT'] and quote.valid_until and today > quote.valid_until:
                 quote.display_expired = True
@@ -345,7 +346,8 @@ def is_quote_editable(quote):
         return False, f'El presupuesto está en estado {quote.status}. Solo se pueden editar presupuestos en estado DRAFT o SENT.'
     
     # Check if expired
-    today = date.today()
+    from app.utils.formatters import get_now_ar
+    today = get_now_ar().date()
     if quote.valid_until and quote.valid_until < today:
         return False, f'Este presupuesto está vencido (válido hasta {quote.valid_until.strftime("%d/%m/%Y")}). No se puede editar.'
     

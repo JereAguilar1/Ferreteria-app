@@ -151,8 +151,11 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         sale_total = sale_total.quantize(Decimal('0.01'))
         
         # Step 4: Create Sale
+        from app.utils.formatters import get_now_ar, ar_to_utc
+        now_utc = ar_to_utc(get_now_ar())
+        
         sale = Sale(
-            datetime=datetime.now(),
+            datetime=now_utc,
             total=sale_total,
             status=SaleStatus.CONFIRMED
         )
@@ -173,7 +176,7 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         
         # Step 6: Create StockMove (OUT)
         stock_move = StockMove(
-            date=datetime.now(),
+            date=now_utc,
             type=StockMoveType.OUT,
             reference_type=StockReferenceType.SALE,
             reference_id=sale.id,
@@ -202,7 +205,7 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
         payment_method_normalized = normalize_payment_method(payment_method)
         
         ledger_entry = FinanceLedger(
-            datetime=datetime.now(),
+            datetime=now_utc,
             type=LedgerType.INCOME,
             amount=sale_total,
             concept=f'Venta #{sale.id}',

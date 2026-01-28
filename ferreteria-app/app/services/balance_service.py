@@ -40,7 +40,11 @@ def get_balance_series(view: str, start: date, end: date, session, method: str =
     end_dt = datetime.combine(end, datetime.max.time())
     
     # Build query with date_trunc and aggregation
-    period_col = func.date_trunc(granularity, FinanceLedger.datetime).label('period')
+    # MEJORA TZ: Convert to Argentina time before truncating
+    # FinanceLedger.datetime is TIMESTAMPTZ (UTC). 
+    # timezone('America/Argentina/Buenos_Aires', ...) converts it to TIMESTAMP (naive) in AR time.
+    local_datetime = func.timezone('America/Argentina/Buenos_Aires', FinanceLedger.datetime)
+    period_col = func.date_trunc(granularity, local_datetime).label('period')
     
     income_sum = func.sum(
         case(
@@ -62,8 +66,9 @@ def get_balance_series(view: str, start: date, end: date, session, method: str =
             income_sum,
             expense_sum
         )
-        .filter(FinanceLedger.datetime >= start_dt)
-        .filter(FinanceLedger.datetime <= end_dt)
+        .filter(local_datetime >= start_dt)
+        .filter(local_datetime <= end_dt)
+        .filter(FinanceLedger.deleted_at.is_(None))
     )
     
     # MEJORA 12: Apply payment method filter
@@ -168,10 +173,14 @@ def get_available_years(session):
     Returns:
         List of integers (years) in descending order
     """
+    # MEJORA TZ: Use local time for year extraction
+    local_datetime = func.timezone('America/Argentina/Buenos_Aires', FinanceLedger.datetime)
+    
     query = (
-        session.query(extract('year', FinanceLedger.datetime).label('year'))
+        session.query(extract('year', local_datetime).label('year'))
+        .filter(FinanceLedger.deleted_at.is_(None))
         .distinct()
-        .order_by(extract('year', FinanceLedger.datetime).desc())
+        .order_by(extract('year', local_datetime).desc())
     )
     
     results = query.all()
@@ -189,11 +198,15 @@ def get_available_months(year: int, session):
     Returns:
         List of integers (1-12) in ascending order
     """
+    # MEJORA TZ: Use local time for year/month extraction
+    local_datetime = func.timezone('America/Argentina/Buenos_Aires', FinanceLedger.datetime)
+    
     query = (
-        session.query(extract('month', FinanceLedger.datetime).label('month'))
-        .filter(extract('year', FinanceLedger.datetime) == year)
+        session.query(extract('month', local_datetime).label('month'))
+        .filter(extract('year', local_datetime) == year)
+        .filter(FinanceLedger.deleted_at.is_(None))
         .distinct()
-        .order_by(extract('month', FinanceLedger.datetime).asc())
+        .order_by(extract('month', local_datetime).asc())
     )
     
     results = query.all()
@@ -289,12 +302,14 @@ def get_current_total_balance(session) -> Decimal:
     income_sum = (
         session.query(func.sum(FinanceLedger.amount))
         .filter(FinanceLedger.type == LedgerType.INCOME)
+        .filter(FinanceLedger.deleted_at.is_(None))
         .scalar()
     ) or Decimal('0.00')
     
     expense_sum = (
         session.query(func.sum(FinanceLedger.amount))
         .filter(FinanceLedger.type == LedgerType.EXPENSE)
+        .filter(FinanceLedger.deleted_at.is_(None))
         .scalar()
     ) or Decimal('0.00')
     

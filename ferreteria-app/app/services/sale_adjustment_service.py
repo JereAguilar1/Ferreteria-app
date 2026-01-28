@@ -167,7 +167,8 @@ def adjust_sale(sale_id: int, new_lines: list, session: Session) -> None:
         
         # Step 7: Create ADJUST stock_move if there are deltas
         if deltas:
-            adjustment_datetime = datetime.now()
+            from app.utils.formatters import get_now_ar, ar_to_utc
+            adjustment_datetime = ar_to_utc(get_now_ar())
             
             stock_move = StockMove(
                 date=adjustment_datetime,
@@ -209,7 +210,8 @@ def adjust_sale(sale_id: int, new_lines: list, session: Session) -> None:
         diff = new_total - old_total
         
         if diff != 0:
-            adjustment_datetime = datetime.now()
+            from app.utils.formatters import get_now_ar, ar_to_utc
+            adjustment_datetime = ar_to_utc(get_now_ar())
             payment_method_normalized = normalize_payment_method(None)  # Default CASH
             
             if diff > 0:

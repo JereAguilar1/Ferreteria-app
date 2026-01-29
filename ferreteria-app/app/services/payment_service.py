@@ -207,10 +207,8 @@ def add_invoice_payment(invoice_id: int, paid_at: date, amount: Decimal, session
         
         # Step 7: Insert finance_ledger EXPENSE
         # Normalize payment_method
-        if payment_method and payment_method.strip():
-            payment_method_enum = PaymentMethod[payment_method.upper()]
-        else:
-            payment_method_enum = None
+        from app.models import normalize_payment_method
+        payment_method_normalized = normalize_payment_method(payment_method)
         
         # Convert date to datetime for ledger (treat as Argentina midnight and convert to UTC)
         from app.utils.formatters import ar_to_utc
@@ -225,7 +223,7 @@ def add_invoice_payment(invoice_id: int, paid_at: date, amount: Decimal, session
             reference_type=LedgerReferenceType.INVOICE_PAYMENT,
             reference_id=invoice_id,
             notes=f'Pago parcial boleta {invoice.invoice_number}' + (f' - {notes}' if notes else ''),
-            payment_method=payment_method_normalized if isinstance(payment_method_normalized, str) else payment_method_enum.value if payment_method_enum else 'CASH'
+            payment_method=payment_method_normalized
         )
         session.add(ledger_entry)
         

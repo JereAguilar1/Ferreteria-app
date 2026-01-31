@@ -670,13 +670,17 @@ def pay_invoice_preview(invoice_id):
         if invoice.status != InvoiceStatus.PENDING:
             return f'<div class="alert alert-danger">Solo se pueden pagar boletas PENDING. Estado actual: {invoice.status.value}</div>'
         
+        # Calculate balance info
+        balance_info = get_invoice_balance(invoice_id, db_session)
+        
         # Pass today's date for default (Argentina)
         from app.utils.formatters import get_now_ar
         today = get_now_ar().date().strftime('%Y-%m-%d')
         
         return render_template('invoices/_pay_confirm_modal.html',
                              invoice=invoice,
-                             today=today)
+                             today=today,
+                             balance_info=balance_info)
         
     except Exception as e:
         current_app.logger.error(f"Error generating payment preview for invoice {invoice_id}: {e}")

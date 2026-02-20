@@ -1,6 +1,7 @@
 """Invoices blueprint for purchase invoice management."""
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from decimal import Decimal
+import decimal
 from datetime import datetime, date, timedelta
 import calendar
 from sqlalchemy import and_
@@ -351,7 +352,6 @@ def new_invoice():
             unit_cost = Decimal(str(line['unit_cost']))
             vat_rate = Decimal(str(line.get('vat_rate', 0)))
             
-            import decimal
             net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
             
             line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
@@ -534,7 +534,6 @@ def confirm_create_preview():
             unit_cost = Decimal(str(line['unit_cost']))
             vat_rate = Decimal(str(line.get('vat_rate', 0)))
             
-            import decimal
             net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
             
             line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)

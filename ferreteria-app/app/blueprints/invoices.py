@@ -114,14 +114,10 @@ def list_invoices():
         for invoice in invoices:
             invoice.is_overdue = is_invoice_overdue(invoice, today)
             
-            # Calculate total paid for this invoice
-            total_paid = (
-                db_session.query(func.coalesce(func.sum(PurchaseInvoicePayment.amount), Decimal('0')))
-                .filter(PurchaseInvoicePayment.invoice_id == invoice.id)
-                .scalar()
-            )
-            invoice.total_paid = total_paid
-            invoice.balance = invoice.total_amount - total_paid
+            # Use unified balance service
+            balance_info = get_invoice_balance(invoice.id, db_session)
+            invoice.total_paid = balance_info['total_paid']
+            invoice.balance = balance_info['balance']
         
         # Get suppliers for filter
         suppliers = db_session.query(Supplier).order_by(Supplier.name).all()

@@ -76,7 +76,18 @@ def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = '
         
         session.flush()  # Ensure invoice is updated before creating ledger entry
         
-        # Step 5: Create finance_ledger entry (EXPENSE) with payment_method (MEJORA 12)
+        # Step 5: Create PurchaseInvoicePayment record (MEJORA B)
+        # This ensures the sum of payments matches the invoice total for balance calculations
+        payment = PurchaseInvoicePayment(
+            invoice_id=invoice_id,
+            paid_at=paid_at,
+            amount=invoice.total_amount,
+            notes=f'Pago total boleta #{invoice.invoice_number}'
+        )
+        session.add(payment)
+        session.flush()
+
+        # Step 6: Create finance_ledger entry (EXPENSE) with payment_method (MEJORA 12)
         from app.utils.formatters import get_now_ar, ar_to_utc
         
         # Convert paid_at (date) to datetime representing Argentina midnight, then to UTC
@@ -105,7 +116,7 @@ def pay_invoice(invoice_id: int, paid_at: date, session, payment_method: str = '
         
         session.add(ledger_entry)
         
-        # Step 6: Commit transaction
+        # Step 7: Commit transaction
         session.commit()
         
     except ValueError:

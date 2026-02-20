@@ -100,7 +100,7 @@ def create_invoice_with_lines(payload: dict, session) -> int:
                 if raw_unit_cost < 0:
                     raise ValueError(f'El costo unitario no puede ser negativo para "{product.name}"')
                 
-                unit_cost = raw_unit_cost.quantize(Decimal('0.01'))
+                unit_cost = raw_unit_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
                 if raw_unit_cost != unit_cost:
                     raise ValueError(f'El costo unitario debe tener exactamente 2 decimales para "{product.name}"')
                     
@@ -114,10 +114,14 @@ def create_invoice_with_lines(payload: dict, session) -> int:
             except (TypeError, ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Alícuota de IVA inválida para "{product.name}"')
             
-            # Calculate line totals
-            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
-            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
-            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            # Calculate line totals using ROUND_HALF_UP to match DB constraint:
+            # round(qty * unit_cost * (1 + vat_rate/100), 2)
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            # Derive VAT amount from total minus net to avoid rounding drift
+            vat_amount = line_total - net_amount
             
             validated_lines.append({
                 'product_id': product_id,
@@ -132,7 +136,7 @@ def create_invoice_with_lines(payload: dict, session) -> int:
             
             total_amount += line_total
         
-        total_amount = total_amount.quantize(Decimal('0.01'))
+        total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
         
         # Step 3: Check for duplicate invoice_number for same supplier
         existing = (session.query(PurchaseInvoice)
@@ -319,7 +323,7 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
                 if raw_unit_cost < 0:
                     raise ValueError(f'El costo unitario no puede ser negativo para "{product.name}"')
                 
-                unit_cost = raw_unit_cost.quantize(Decimal('0.01'))
+                unit_cost = raw_unit_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
                 if raw_unit_cost != unit_cost:
                     raise ValueError(f'El costo unitario debe tener exactamente 2 decimales para "{product.name}"')
             except (TypeError, ValueError, decimal.InvalidOperation):
@@ -332,10 +336,14 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
             except (TypeError, ValueError, decimal.InvalidOperation):
                 raise ValueError(f'Alícuota de IVA inválida para "{product.name}"')
             
-            # Calculate line totals
-            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
-            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
-            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            # Calculate line totals using ROUND_HALF_UP to match DB constraint:
+            # round(qty * unit_cost * (1 + vat_rate/100), 2)
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            # Derive VAT amount from total minus net to avoid rounding drift
+            vat_amount = line_total - net_amount
             
             line_data = {
                 'product_id': product_id,
@@ -352,7 +360,7 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
             new_lines_by_product[product_id] = line_data
             total_amount += line_total
         
-        total_amount = total_amount.quantize(Decimal('0.01'))
+        total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
         
         # Step 5: Calculate deltas per product
         deltas = {}  # {product_id: delta_qty}

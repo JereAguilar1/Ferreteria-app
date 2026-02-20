@@ -351,12 +351,13 @@ def new_invoice():
             unit_cost = Decimal(str(line['unit_cost']))
             vat_rate = Decimal(str(line.get('vat_rate', 0)))
             
-            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
-            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
-            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            import decimal
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
             
             total_amount += line_total
-        total_amount = total_amount.quantize(Decimal('0.01'))
+        total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
         
         return render_template('invoices/new.html',
                              suppliers=suppliers,
@@ -533,16 +534,20 @@ def confirm_create_preview():
             unit_cost = Decimal(str(line['unit_cost']))
             vat_rate = Decimal(str(line.get('vat_rate', 0)))
             
-            net_amount = (qty * unit_cost).quantize(Decimal('0.01'))
-            vat_amount = (net_amount * (vat_rate / Decimal('100'))).quantize(Decimal('0.01'))
-            line_total = (net_amount + vat_amount).quantize(Decimal('0.01'))
+            import decimal
+            net_amount = (qty * unit_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            line_total = (qty * unit_cost * (Decimal('1') + vat_rate / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+            
+            # Derive VAT for preview
+            vat_amount = line_total - net_amount
             
             total_amount += line_total
             
             lines_data.append({
                 'product': product,
                 'qty': qty,
-                'unit_cost': unit_cost.quantize(Decimal('0.01')),
+                'unit_cost': unit_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP),
                 'vat_rate': vat_rate,
                 'vat_amount': vat_amount,
                 'net_amount': net_amount,
@@ -559,7 +564,7 @@ def confirm_create_preview():
         except ValueError:
             return '<div class="alert alert-danger">Fecha inválida en el draft.</div>'
         
-        total_amount = total_amount.quantize(Decimal('0.01'))
+        total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
 
         return render_template('invoices/_create_confirm_modal.html',
                              supplier=supplier,

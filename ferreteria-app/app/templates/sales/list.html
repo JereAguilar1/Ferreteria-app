@@ -22,13 +22,8 @@
         <form method="GET" action="{{ url_for('sales.list_sales') }}" class="row g-3">
             <div class="col-md-8">
                 <label for="id" class="form-label">Buscar por ID de Venta</label>
-                <input type="number" 
-                       class="form-control" 
-                       id="id" 
-                       name="id" 
-                       value="{{ sale_id_search or '' }}"
-                       placeholder="Ej: 123"
-                       min="1">
+                <input type="number" class="form-control" id="id" name="id" value="{{ sale_id_search or '' }}"
+                    placeholder="Ej: 123" min="1">
             </div>
             <div class="col-md-4 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary me-2">
@@ -46,9 +41,9 @@
 
 <!-- Sales Table -->
 <div class="card">
-    <div class="card-header bg-success text-white">
+    <div class="card-header bg-dark text-white">
         <h5 class="card-title mb-0">
-            <i class="bi bi-list"></i> Ventas Confirmadas
+            <i class="bi bi-list"></i> Historial de Ventas
         </h5>
     </div>
     <div class="card-body">
@@ -66,37 +61,42 @@
                 </thead>
                 <tbody>
                     {% for sale in sales %}
-                    <tr>
-                        <td>
-                            <strong>#{{ sale.id }}</strong>
-                        </td>
+                    <tr class="{% if sale.status.value == 'CANCELLED' %}table-danger text-muted{% endif %}">
+                        <td><strong>#{{ sale.id }}</strong></td>
                         <td>{{ sale.datetime|datetime_ar }}</td>
                         <td class="text-end">
-                            <strong>${{ "%.2f"|format(sale.total) }}</strong>
+                            <strong{% if sale.status.value=='CANCELLED' %}
+                                class="text-decoration-line-through text-muted" {% endif %}>
+                                ${{ "%.2f"|format(sale.total) }}
+                                </strong>
                         </td>
                         <td>
-                            {% if sale.status.value == 'CONFIRMED' or sale.status == 'CONFIRMED' %}
-                                <span class="badge bg-success">Confirmada</span>
-                            {% elif sale.status.value == 'CANCELLED' or sale.status == 'CANCELLED' %}
-                                <span class="badge bg-danger">Cancelada</span>
+                            {% if sale.status.value == 'CONFIRMED' %}
+                            <span class="badge bg-success">Confirmada</span>
+                            {% elif sale.status.value == 'CANCELLED' %}
+                            <span class="badge bg-danger">Anulada</span>
                             {% else %}
-                                <span class="badge bg-secondary">{{ sale.status.value if sale.status.value else sale.status }}</span>
+                            <span class="badge bg-secondary">{{ sale.status.value }}</span>
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            <a href="{{ url_for('sales.detail_sale', sale_id=sale.id) }}" 
-                               class="btn btn-sm btn-info"
-                               title="Ver Detalle">
+                            <a href="{{ url_for('sales.detail_sale', sale_id=sale.id) }}" class="btn btn-sm btn-info"
+                                title="Ver Detalle">
                                 <i class="bi bi-eye"></i>
                             </a>
-                            {% if sale.status.value == 'CONFIRMED' or sale.status == 'CONFIRMED' %}
-                            <a href="{{ url_for('sales.edit_sale_form', sale_id=sale.id) }}" 
-                               class="btn btn-sm btn-warning"
-                               title="Editar/Ajustar esta venta">
-                                <i class="bi bi-pencil"></i> Editar
+                            {% if sale.status.value == 'CONFIRMED' %}
+                            <a href="{{ url_for('sales.edit_sale_form', sale_id=sale.id) }}"
+                                class="btn btn-sm btn-warning" title="Editar/Ajustar">
+                                <i class="bi bi-pencil"></i>
                             </a>
+                            <button type="button" class="btn btn-sm btn-danger" title="Anular esta venta"
+                                data-sale-id="{{ sale.id }}" data-sale-total="{{ '%.2f'|format(sale.total) }}"
+                                data-void-url="{{ url_for('sales.void_sale_route', sale_id=sale.id) }}"
+                                onclick="openVoidModal(this)">
+                                <i class="bi bi-x-octagon"></i> Anular
+                            </button>
                             {% else %}
-                            <span class="text-muted small">No editable</span>
+                            <span class="text-muted small"><i class="bi bi-slash-circle"></i> Anulada</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -108,12 +108,68 @@
         <div class="alert alert-info text-center">
             <i class="bi bi-info-circle"></i>
             {% if sale_id_search %}
-                No se encontraron ventas con ID: <strong>{{ sale_id_search }}</strong>
+            No se encontraron ventas con ID: <strong>{{ sale_id_search }}</strong>
             {% else %}
-                No hay ventas confirmadas aún.
+            No hay ventas registradas aún.
             {% endif %}
         </div>
         {% endif %}
     </div>
 </div>
+
+<!-- Shared Void Confirmation Modal -->
+<div class="modal fade" id="voidSaleModal" tabindex="-1" aria-labelledby="voidSaleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="voidSaleModalLabel">
+                    <i class="bi bi-x-octagon-fill"></i> Confirmar Anulación
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>¡Esta acción es irreversible!</strong> Al confirmar:
+                    <ul class="mb-0 mt-1">
+                        <li>El stock de los productos será <strong>restaurado</strong>.</li>
+                        <li>Se registrará un <strong>egreso contable</strong> como contrapartida.</li>
+                        <li>La venta quedará en estado <strong>ANULADA</strong>.</li>
+                    </ul>
+                </div>
+                <p class="mb-1">¿Confirma la anulación de la venta <strong id="modalSaleId"></strong>?</p>
+                <p class="text-muted mb-0">Monto a revertir: <strong id="modalSaleTotal"
+                        class="text-danger fs-5"></strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <form id="voidSaleForm" method="POST" action="" class="d-inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-x-octagon-fill"></i> Sí, Anular Venta
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function openVoidModal(btn) {
+        var saleId = btn.getAttribute('data-sale-id');
+        var saleTotal = btn.getAttribute('data-sale-total');
+        var voidUrl = btn.getAttribute('data-void-url');
+
+        document.getElementById('modalSaleId').textContent = '#' + saleId;
+        document.getElementById('modalSaleTotal').textContent = '$' + saleTotal;
+        document.getElementById('voidSaleForm').setAttribute('action', voidUrl);
+
+        var modal = new bootstrap.Modal(document.getElementById('voidSaleModal'));
+        modal.show();
+    }
+</script>
 {% endblock %}

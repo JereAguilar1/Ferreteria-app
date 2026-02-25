@@ -633,9 +633,9 @@ def list_sales():
         # Get search params
         sale_id_search = request.args.get('id', '').strip()
         
-        # Build query
+        # Build query — show all statuses (CONFIRMED and CANCELLED)
         from app.models import Sale, SaleStatus
-        query = db_session.query(Sale).filter(Sale.status == SaleStatus.CONFIRMED)
+        query = db_session.query(Sale)
         
         # Search by ID
         if sale_id_search:
@@ -906,4 +906,48 @@ def edit_sale_save(sale_id):
     except Exception as e:
         flash(f'Error al guardar ajustes: {str(e)}', 'danger')
         return redirect(url_for('sales.edit_sale_form', sale_id=sale_id))
+
+
+# ============================================================================
+# Void Sale (Anular Venta)
+# ============================================================================
+
+@sales_bp.route('/<int:sale_id>/void/preview', methods=['GET'])
+def void_sale_preview(sale_id):
+    """Show void sale confirmation modal (HTMX endpoint)."""
+    db_session = get_session()
+
+    try:
+        from app.models import Sale
+        sale = db_session.query(Sale).filter_by(id=sale_id).first()
+
+        if not sale:
+            return '<div class="alert alert-danger">Venta no encontrada.</div>'
+
+        if sale.status != SaleStatus.CONFIRMED:
+            return '<div class="alert alert-warning">Esta venta no puede anularse (ya fue cancelada o tiene un estado inválido).</div>'
+
+        return render_template('sales/_void_confirm_modal.html', sale=sale)
+
+    except Exception as e:
+        return f'<div class="alert alert-danger">Error al cargar confirmación: {str(e)}</div>'
+
+
+@sales_bp.route('/<int:sale_id>/void', methods=['POST'])
+def void_sale_route(sale_id):
+    """Void a confirmed sale (reverse stock and ledger)."""
+    db_session = get_session()
+
+    try:
+        from app.services.void_sale_service import void_sale
+        void_sale(sale_id, db_session)
+        flash(f'Venta #{sale_id} anulada exitosamente. Stock restaurado y egreso registrado.', 'success')
+        return redirect(url_for('sales.list_sales'))
+
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('sales.detail_sale', sale_id=sale_id))
+    except Exception as e:
+        flash(f'Error al anular venta: {str(e)}', 'danger')
+        return redirect(url_for('sales.detail_sale', sale_id=sale_id))
 

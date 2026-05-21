@@ -258,7 +258,10 @@
             const padded = (decPart + '00').slice(0, 2);
             return `${intFormatted},${padded}`;
         }
-        return decPart ? `${intFormatted},${decPart}` : intFormatted;
+        if (cleaned.includes(',')) {
+            return `${intFormatted},${decPart}`;
+        }
+        return intFormatted;
     }
 
     function formatNumberAr(value) {
@@ -268,7 +271,10 @@
         const intPart = rawInt.replace(/^0+(?=\d)/, '') || '0';
         const decPart = rawDec;
         const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        return decPart ? `${intFormatted},${decPart}` : intFormatted;
+        if (cleaned.includes(',')) {
+            return `${intFormatted},${decPart}`;
+        }
+        return intFormatted;
     }
 
     function numberToMoneyAr(num) {
@@ -298,7 +304,21 @@
     }
 
     function attachMoneyInput(input) {
-        const onInput = () => { input.value = formatMoneyAr(input.value, false); };
+        const onInput = (e) => {
+            let val = input.value;
+            let cursor = input.selectionStart;
+            if (cursor > 0 && val[cursor - 1] === '.') {
+                val = val.substring(0, cursor - 1) + ',' + val.substring(cursor);
+            }
+            let formatted = formatMoneyAr(val, false);
+            if (formatted !== input.value) {
+                input.value = formatted;
+                try {
+                    let newCursor = cursor + (formatted.length - val.length);
+                    input.setSelectionRange(newCursor, newCursor);
+                } catch (err) {}
+            }
+        };
         const onBlur = () => { input.value = formatMoneyAr(input.value, true); };
         input.addEventListener('input', onInput);
         input.addEventListener('blur', onBlur);
@@ -306,7 +326,21 @@
     }
 
     function attachNumberInput(input) {
-        const onInput = () => { input.value = formatNumberAr(input.value); };
+        const onInput = (e) => {
+            let val = input.value;
+            let cursor = input.selectionStart;
+            if (cursor > 0 && val[cursor - 1] === '.') {
+                val = val.substring(0, cursor - 1) + ',' + val.substring(cursor);
+            }
+            let formatted = formatNumberAr(val);
+            if (formatted !== input.value) {
+                input.value = formatted;
+                try {
+                    let newCursor = cursor + (formatted.length - val.length);
+                    input.setSelectionRange(newCursor, newCursor);
+                } catch (err) {}
+            }
+        };
         const onBlur = () => { input.value = formatNumberAr(input.value); };
         input.addEventListener('input', onInput);
         input.addEventListener('blur', onBlur);

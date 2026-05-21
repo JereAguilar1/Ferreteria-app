@@ -241,12 +241,30 @@
                 const paddedDec = (decimalPart + '00').slice(0, 2);
                 return `${intFormatted},${paddedDec}`;
             }
-            return decimalPart ? `${intFormatted},${decimalPart}` : intFormatted;
+            if (cleaned.includes(',')) {
+                return `${intFormatted},${decimalPart}`;
+            }
+            return intFormatted;
         }
 
         function attachMoneyInput(input) {
-            const handleInput = () => {
-                input.value = formatMoneyAr(input.value, false);
+            const handleInput = (e) => {
+                let val = input.value;
+                let cursor = input.selectionStart;
+                
+                // Convert numpad dot to comma if it was just typed
+                if (cursor > 0 && val[cursor - 1] === '.') {
+                    val = val.substring(0, cursor - 1) + ',' + val.substring(cursor);
+                }
+                
+                let formatted = formatMoneyAr(val, false);
+                if (formatted !== input.value) {
+                    input.value = formatted;
+                    try {
+                        let newCursor = cursor + (formatted.length - val.length);
+                        input.setSelectionRange(newCursor, newCursor);
+                    } catch (err) {}
+                }
             };
             const handleBlur = () => {
                 input.value = formatMoneyAr(input.value, true);

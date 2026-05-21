@@ -11,7 +11,8 @@ from sqlalchemy import func
 from app.services.invoice_service import create_invoice_with_lines, update_invoice_with_lines, delete_invoice
 from app.services.payment_service import pay_invoice, add_invoice_payment, get_invoice_balance
 from app.services.invoice_alerts_service import is_invoice_overdue
-from app.utils.number_format import parse_ar_decimal, parse_ar_number
+from app.utils.number_format import parse_ar_number
+from app.utils.decimal_parser import parse_decimal_ar
 
 invoices_bp = Blueprint('invoices', __name__, url_prefix='/invoices')
 
@@ -403,7 +404,7 @@ def add_draft_line():
         vat_rate_raw = request.form.get('vat_rate', '0').strip()
         
         try:
-            unit_cost_decimal = parse_ar_decimal(unit_cost_raw)
+            unit_cost_decimal = parse_decimal_ar(unit_cost_raw, field_name='costo unitario').quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
             vat_rate_decimal = Decimal(vat_rate_raw.replace(',', '.'))
         except ValueError as e:
             flash(str(e), 'danger')
@@ -848,7 +849,7 @@ def edit_invoice_preview(invoice_id):
             try:
                 product_id_int = int(product_id)
                 qty_decimal = parse_ar_number(qty)
-                unit_cost_decimal = parse_ar_decimal(unit_cost)
+                unit_cost_decimal = parse_decimal_ar(unit_cost, field_name='costo unitario').quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
                 
                 if qty_decimal <= 0:
                     return f'<div class="alert alert-danger">La cantidad debe ser mayor a 0 en la línea {line_index + 1}.</div>'
@@ -1055,7 +1056,7 @@ def save_invoice_edit(invoice_id):
             try:
                 product_id_int = int(product_id)
                 qty_decimal = parse_ar_number(qty)
-                unit_cost_decimal = parse_ar_decimal(unit_cost)
+                unit_cost_decimal = parse_decimal_ar(unit_cost, field_name='costo unitario').quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
                 
                 if qty_decimal <= 0:
                     flash(f'La cantidad debe ser mayor a 0 en la línea {line_index + 1}.', 'danger')

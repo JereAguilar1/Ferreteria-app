@@ -1,3 +1,4 @@
+{% if not append_mode %}
 <!-- Active Filters Info -->
 {% if search_query or selected_category_id or selected_stock_filter %}
 <div class="row mb-2">
@@ -24,7 +25,7 @@
                 {% if search_query %}
                 <span class="badge bg-primary">Búsqueda: "{{ search_query }}"</span>
                 {% endif %}
-                - Mostrando {{ products|length }} producto(s)
+                - Mostrando {{ total_items }} producto(s)
             </small>
             <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
@@ -43,20 +44,26 @@
                         <th>ID</th>
                         <th style="width: 80px;">Imagen</th>
                         <th>Nombre</th>
-                        <!--<th>SKU</th>
-                        <th>Código Barras</th>-->
                         <th>Categoría</th>
                         <th>Unidad</th>
                         <th class="text-end">Precio Venta</th>
                         <th class="text-center">Stock</th>
                         <th class="text-center">Stock Mín.</th>
-                        <!--<th class="text-center">Estado</th>-->
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="product-tbody">
+{% endif %}
+{% endif %}
+
+{% if products %}
                     {% for product in products %}
-                    <tr class="{% if product.on_hand_qty == 0 %}out-of-stock{% endif %}">
+                    <tr class="{% if product.on_hand_qty == 0 %}out-of-stock{% endif %}"
+                        {% if loop.last and page < total_pages %}
+                        hx-get="{{ url_for('catalog.list_products', page=page+1, q=search_query, category_id=selected_category_id, stock_filter=selected_stock_filter, append_mode='true') }}"
+                        hx-trigger="revealed"
+                        hx-swap="afterend"
+                        {% endif %}>
                         <td>{{ product.id }}</td>
                         <td>
                             {% if product.image_path %}
@@ -77,8 +84,6 @@
                             <br><span class="badge bg-secondary">Sin stock</span>
                             {% endif %}
                         </td>
-                        <!--<td>{{ product.sku or '-' }}</td>
-                        <td>{{ product.barcode or '-' }}</td>-->
                         <td>{{ product.category.name if product.category else '-' }}</td>
                         <td>
                             <span class="badge bg-info">{{ product.uom.symbol }}</span>
@@ -101,13 +106,6 @@
                             <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <!--<td class="text-center">
-                            {% if product.active %}
-                            <span class="badge bg-success">Activo</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Inactivo</span>
-                            {% endif %}
-                        </td>-->
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{{ url_for('catalog.edit_product', product_id=product.id) }}" 
@@ -115,16 +113,6 @@
                                    title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <!--<form method="POST" 
-                                      action="{{ url_for('catalog.toggle_active', product_id=product.id) }}"
-                                      style="display: inline;">
-                                    <button type="submit" 
-                                            class="btn btn-outline-{% if product.active %}secondary{% else %}success{% endif %}"
-                                            title="{% if product.active %}Desactivar{% else %}Activar{% endif %}"
-                                            onclick="return confirm('¿Está seguro de {% if product.active %}desactivar{% else %}activar{% endif %} este producto?')">
-                                        <i class="bi bi-{% if product.active %}toggle-off{% else %}toggle-on{% endif %}"></i>
-                                    </button>
-                                </form>-->
                                 <button type="button"
                                         class="btn btn-outline-danger"
                                         title="Eliminar"
@@ -137,13 +125,17 @@
                         </td>
                     </tr>
                     {% endfor %}
+{% endif %}
+
+{% if not append_mode %}
+        {% if products %}
                 </tbody>
             </table>
         </div>
         
         <div class="mt-3">
-            <p class="text-muted">
-                <strong>{{ products|length }}</strong> producto(s) encontrado(s)
+            <p class="text-muted mb-0">
+                Mostrando <strong>{{ total_items }}</strong> producto(s)
                 {% if search_query %}
                 para la búsqueda: <strong>"{{ search_query }}"</strong>
                 {% endif %}
@@ -162,3 +154,4 @@
         {% endif %}
     </div>
 </div>
+{% endif %}

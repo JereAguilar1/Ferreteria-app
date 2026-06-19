@@ -74,6 +74,11 @@ def list_products():
         category_id = request.args.get('category_id', '').strip()
         stock_filter = request.args.get('stock_filter', '').strip()  # MEJORA 10
         
+        # Pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = 50
+        append_mode = request.args.get('append_mode') == 'true'
+        
         # Get all categories for the filter dropdown
         categories = session.query(Category).order_by(Category.name).all()
         
@@ -125,8 +130,14 @@ def list_products():
                 flash('Filtro de stock inválido. Mostrando todos los productos.', 'info')
                 stock_filter = ''
         
-        # Order by name
-        products = query.order_by(Product.name).all()
+        import math
+        
+        # Calculate pagination
+        total_items = query.count()
+        total_pages = math.ceil(total_items / per_page) if total_items > 0 else 1
+        
+        # Order by name and apply pagination
+        products = query.order_by(Product.name).offset((page - 1) * per_page).limit(per_page).all()
         
         # Check if request is from HTMX (live search)
         is_htmx = request.headers.get('HX-Request') == 'true'
@@ -138,7 +149,11 @@ def list_products():
                              search_query=search_query,
                              categories=categories,
                              selected_category_id=category_id,
-                             selected_stock_filter=stock_filter)
+                             selected_stock_filter=stock_filter,
+                             page=page,
+                             total_pages=total_pages,
+                             total_items=total_items,
+                             append_mode=append_mode)
         
     except Exception as e:
         # Rollback any failed transaction before retrying queries
@@ -160,7 +175,11 @@ def list_products():
                              search_query='',
                              categories=categories,
                              selected_category_id='',
-                             selected_stock_filter='')
+                             selected_stock_filter='',
+                             page=1,
+                             total_pages=1,
+                             total_items=0,
+                             append_mode=False)
 
 
 @catalog_bp.route('/new', methods=['GET'])

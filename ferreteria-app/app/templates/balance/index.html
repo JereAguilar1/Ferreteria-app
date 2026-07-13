@@ -217,33 +217,11 @@
 
 <!-- Totals Summary -->
 <div class="row mb-3">
-    <div class="col-md-4">
+    <div class="col-md-12">
         <div class="card border-secondary">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-1">
-                    <i class="bi bi-arrow-down-circle"></i> Ingresos Totales
-                </h6>
-                <h3 class="mb-0 text-dark">${{ totals.total_income|money_ar_2 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card border-secondary">
-            <div class="card-body text-center">
-                <h6 class="text-muted mb-1">
-                    <i class="bi bi-arrow-up-circle"></i> Egresos Totales
-                </h6>
-                <h3 class="mb-0 text-dark">${{ totals.total_expense|money_ar_2 }}</h3>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card border-secondary">
-            <div class="card-body text-center">
-                <h6 class="text-muted mb-1">
-                    <i class="bi bi-calculator"></i> Neto
+                    <i class="bi bi-calculator"></i> Ingresos Totales Netos
                 </h6>
                 <h3 class="mb-0 text-dark">
                     ${{ totals.total_net|money_ar_2 }}

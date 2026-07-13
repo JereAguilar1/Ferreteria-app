@@ -111,7 +111,7 @@
                         </td>
                         <td
                             class="text-end {% if entry.type.value == 'INCOME' %}text-success{% else %}text-danger{% endif %}">
-                            <strong>${{ "%.2f"|format(entry.amount) }}</strong>
+                            <strong>${{ entry.amount|money_ar_2 }}</strong>
                         </td>
                         <td>
                             {% if entry.reference_type.value == 'SALE' %}
@@ -159,7 +159,7 @@
                                             <p>¿Está seguro que desea eliminar el movimiento manual <strong>#{{ entry.id
                                                     }}</strong>?</p>
                                             <p><strong>Concepto:</strong> {{ entry.concept }}</p>
-                                            <p><strong>Monto:</strong> ${{ "%.2f"|format(entry.amount) }}</p>
+                                            <p><strong>Monto:</strong> ${{ entry.amount|money_ar_2 }}</p>
                                             <p class="text-danger small">Esta acción no se puede deshacer (se marcará
                                                 como eliminado).</p>
                                         </div>

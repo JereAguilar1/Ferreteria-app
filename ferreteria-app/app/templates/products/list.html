@@ -58,7 +58,10 @@
                         Sin stock
                     </option>
                     <option value="low" {% if selected_stock_filter == 'low' %}selected{% endif %}>
-                        Poco stock (≤ mínimo)
+                        Poco stock (&le; mínimo)
+                    </option>
+                    <option value="mayor_stock" {% if selected_stock_filter == 'mayor_stock' %}selected{% endif %}>
+                        Mayor stock primero
                     </option>
                 </select>
             </div>

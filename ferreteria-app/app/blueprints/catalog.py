@@ -125,7 +125,12 @@ def list_products():
                     func.coalesce(Product.min_stock_qty, 0) > 0,
                     func.coalesce(ProductStock.on_hand_qty, 0) <= func.coalesce(Product.min_stock_qty, 0)
                 )
-            elif stock_filter not in ['', 'out', 'low']:
+            elif stock_filter == 'mayor_stock':
+                # Mayor stock: only products with stock > 0, sorted desc
+                query = query.filter(
+                    func.coalesce(ProductStock.on_hand_qty, 0) > 0
+                )
+            elif stock_filter not in ['', 'out', 'low', 'mayor_stock']:
                 # Invalid stock_filter, reset to all
                 flash('Filtro de stock inválido. Mostrando todos los productos.', 'info')
                 stock_filter = ''
@@ -136,8 +141,14 @@ def list_products():
         total_items = query.count()
         total_pages = math.ceil(total_items / per_page) if total_items > 0 else 1
         
-        # Order by name and apply pagination
-        products = query.order_by(Product.name).offset((page - 1) * per_page).limit(per_page).all()
+        # Order by: if mayor_stock, sort by stock desc; otherwise by name
+        if stock_filter == 'mayor_stock':
+            products = query.order_by(
+                func.coalesce(ProductStock.on_hand_qty, 0).desc(),
+                Product.name
+            ).offset((page - 1) * per_page).limit(per_page).all()
+        else:
+            products = query.order_by(Product.name).offset((page - 1) * per_page).limit(per_page).all()
         
         # Check if request is from HTMX (live search)
         is_htmx = request.headers.get('HX-Request') == 'true'

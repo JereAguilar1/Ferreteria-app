@@ -511,10 +511,11 @@
         const lines = linesContainer.querySelectorAll('.line-item');
         lines.forEach((line, index) => {
             line.dataset.lineIndex = index;
-            const inputs = line.querySelectorAll('input[name*="lines["]');
-            inputs.forEach(input => {
-                const name = input.name;
-                input.name = name.replace(/lines\[\d+\]/, `lines[${index}]`);
+            // Reindex both inputs and selects
+            const inputs = line.querySelectorAll('input[name*="lines["], select[name*="lines["]');
+            inputs.forEach(el => {
+                const name = el.name;
+                el.name = name.replace(/lines\[\d+\]/, `lines[${index}]`);
             });
         });
         lineIndex = lines.length;

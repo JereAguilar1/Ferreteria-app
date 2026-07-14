@@ -103,9 +103,9 @@ def list_invoices():
         if search_query:
             query = query.filter(PurchaseInvoice.invoice_number.ilike(f'%{search_query}%'))
         
-        # MEJORA 21: Order by due_date (ascending, NULLS LAST), then by created_at (descending)
+        # Order by invoice_date descending (newest first), then by created_at descending
         invoices = query.order_by(
-            PurchaseInvoice.due_date.asc().nullslast(),
+            PurchaseInvoice.invoice_date.desc(),
             PurchaseInvoice.created_at.desc()
         ).all()
         
@@ -834,6 +834,7 @@ def edit_invoice_preview(invoice_id):
             product_id_key = f'lines[{line_index}][product_id]'
             qty_key = f'lines[{line_index}][qty]'
             unit_cost_key = f'lines[{line_index}][unit_cost]'
+            vat_rate_key = f'lines[{line_index}][vat_rate]'
             
             if product_id_key not in request.form:
                 break
@@ -841,6 +842,7 @@ def edit_invoice_preview(invoice_id):
             product_id = request.form.get(product_id_key, '').strip()
             qty = request.form.get(qty_key, '').strip()
             unit_cost = request.form.get(unit_cost_key, '').strip()
+            vat_rate_raw = request.form.get(vat_rate_key, '0').strip()
             
             if not product_id or not qty or not unit_cost:
                 line_index += 1
@@ -850,6 +852,7 @@ def edit_invoice_preview(invoice_id):
                 product_id_int = int(product_id)
                 qty_decimal = parse_ar_number(qty)
                 unit_cost_decimal = parse_decimal_ar(unit_cost, field_name='costo unitario').quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+                vat_rate_decimal = Decimal(vat_rate_raw.replace(',', '.'))
                 
                 if qty_decimal <= 0:
                     return f'<div class="alert alert-danger">La cantidad debe ser mayor a 0 en la línea {line_index + 1}.</div>'
@@ -865,10 +868,18 @@ def edit_invoice_preview(invoice_id):
                 if not product.active:
                     return f'<div class="alert alert-danger">El producto "{product.name}" está inactivo.</div>'
                 
+                net_amount = (qty_decimal * unit_cost_decimal).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+                line_total = (qty_decimal * unit_cost_decimal * (Decimal('1') + vat_rate_decimal / Decimal('100'))).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+                vat_amount = line_total - net_amount
+                
                 lines_data.append({
                     'product_id': product_id_int,
                     'qty': qty_decimal,
                     'unit_cost': unit_cost_decimal,
+                    'vat_rate': vat_rate_decimal,
+                    'vat_amount': vat_amount,
+                    'net_amount': net_amount,
+                    'line_total': line_total,
                     'product': product
                 })
                 
@@ -916,9 +927,10 @@ def edit_invoice_preview(invoice_id):
             product_id = new_line_data['product_id']
             new_qty = new_line_data['qty']
             new_unit_cost = new_line_data['unit_cost']
+            new_vat_rate = new_line_data.get('vat_rate', Decimal('0'))
             product = new_line_data['product']
             
-            line_total = (new_qty * new_unit_cost).quantize(Decimal('0.01'))
+            line_total = new_line_data.get('line_total', (new_qty * new_unit_cost).quantize(Decimal('0.01')))
             new_total += line_total
             
             if product_id not in old_lines_by_product:
@@ -938,7 +950,7 @@ def edit_invoice_preview(invoice_id):
             else:
                 # Check if modified
                 old_line = old_lines_by_product[product_id]
-                if old_line.qty != new_qty or old_line.unit_cost != new_unit_cost:
+                if old_line.qty != new_qty or old_line.unit_cost != new_unit_cost or old_line.vat_rate != new_vat_rate:
                     changes['modified'].append({
                         'product': product.name,
                         'old_qty': old_line.qty,
@@ -1041,6 +1053,7 @@ def save_invoice_edit(invoice_id):
             product_id_key = f'lines[{line_index}][product_id]'
             qty_key = f'lines[{line_index}][qty]'
             unit_cost_key = f'lines[{line_index}][unit_cost]'
+            vat_rate_key = f'lines[{line_index}][vat_rate]'
             
             if product_id_key not in request.form:
                 break
@@ -1048,6 +1061,7 @@ def save_invoice_edit(invoice_id):
             product_id = request.form.get(product_id_key, '').strip()
             qty = request.form.get(qty_key, '').strip()
             unit_cost = request.form.get(unit_cost_key, '').strip()
+            vat_rate_raw = request.form.get(vat_rate_key, '0').strip()
             
             if not product_id or not qty or not unit_cost:
                 line_index += 1
@@ -1057,6 +1071,7 @@ def save_invoice_edit(invoice_id):
                 product_id_int = int(product_id)
                 qty_decimal = parse_ar_number(qty)
                 unit_cost_decimal = parse_decimal_ar(unit_cost, field_name='costo unitario').quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+                vat_rate_decimal = Decimal(vat_rate_raw.replace(',', '.'))
                 
                 if qty_decimal <= 0:
                     flash(f'La cantidad debe ser mayor a 0 en la línea {line_index + 1}.', 'danger')
@@ -1065,7 +1080,8 @@ def save_invoice_edit(invoice_id):
                 lines_data.append({
                     'product_id': product_id_int,
                     'qty': qty_decimal,
-                    'unit_cost': unit_cost_decimal
+                    'unit_cost': unit_cost_decimal,
+                    'vat_rate': vat_rate_decimal
                 })
                 
             except (ValueError, TypeError) as e:

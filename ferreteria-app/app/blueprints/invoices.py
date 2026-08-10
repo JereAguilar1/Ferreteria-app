@@ -315,6 +315,46 @@ def update_due_date(invoice_id):
         return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
 
 
+@invoices_bp.route('/<int:invoice_id>/duplicate', methods=['POST'])
+def duplicate_invoice(invoice_id):
+    """Duplicate an invoice to create a new one."""
+    db_session = get_session()
+    
+    try:
+        invoice = db_session.query(PurchaseInvoice).filter_by(id=invoice_id).first()
+        if not invoice:
+            flash('Boleta no encontrada', 'danger')
+            return redirect(url_for('invoices.list_invoices'))
+            
+        from app.utils.formatters import get_now_ar
+        today = get_now_ar().date()
+        
+        draft = {
+            'supplier_id': invoice.supplier_id,
+            'invoice_number': '',
+            'invoice_date': today.strftime('%Y-%m-%d'),
+            'due_date': '',
+            'lines': []
+        }
+        
+        for line in invoice.lines:
+            draft['lines'].append({
+                'product_id': line.product_id,
+                'qty': float(line.qty),
+                'unit_cost': float(line.unit_cost),
+                'vat_rate': float(line.vat_rate) if line.vat_rate is not None else 0.0
+            })
+            
+        save_invoice_draft(draft)
+        
+        flash('Boleta duplicada. Verifique y complete los datos para crearla.', 'info')
+        return redirect(url_for('invoices.new_invoice'))
+        
+    except Exception as e:
+        flash(f'Error al duplicar boleta: {str(e)}', 'danger')
+        return redirect(url_for('invoices.list_invoices'))
+
+
 @invoices_bp.route('/new', methods=['GET'])
 def new_invoice():
     """Show form to create new invoice."""

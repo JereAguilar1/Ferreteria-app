@@ -6,6 +6,6 @@
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 3aef57a
 
 ## Phase 2: UI Integration
-- [ ] Task: Add a "Duplicate" button to the boletas list view next to each boleta.
-- [ ] Task: Implement the frontend interaction to handle clicking the button and redirecting to the pre-filled form without saving immediately.
+- [x] Task: Add a "Duplicate" button to the boletas list view next to each boleta. 7ab9d65
+- [x] Task: Implement the frontend interaction to handle clicking the button and redirecting to the pre-filled form without saving immediately. 7ab9d65
 - [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)

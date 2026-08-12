@@ -1,9 +1,9 @@
 # Implementation Plan: Duplicate Invoice (Boleta) Feature
 
-## Phase 1: Backend Duplication Logic
+## Phase 1: Backend Duplication Logic [checkpoint: 3aef57a]
 - [x] Task: Write tests for boleta duplication data transformation (keeping customer/products, resetting date/number). 3aef57a
 - [x] Task: Implement boleta duplication logic in the backend (e.g., service function or route handler). 3aef57a
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 3aef57a
 
 ## Phase 2: UI Integration
 - [ ] Task: Add a "Duplicate" button to the boletas list view next to each boleta.

@@ -9,14 +9,14 @@
   - [x] Apply Alembic migration to the local database.
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 2be2c10
 
-## Phase 2: Backend Logic (Total Calculation & Endpoints)
-- [ ] Task: Write failing tests for Backend Logic (Red Phase)
-  - [ ] Write tests to verify that creating a sale correctly calculates `Total = Subtotal + Flete`.
-  - [ ] Write tests to ensure the endpoint correctly processes `shipping_cost` from incoming form data/JSON.
-- [ ] Task: Implement Backend Logic (Green Phase)
-  - [ ] Update the backend service or logic layer to include `shipping_cost` in the total calculation.
-  - [ ] Update the corresponding Flask routes/views to accept and process the `shipping_cost` parameter.
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+## Phase 2: Backend Logic (Total Calculation & Endpoints) [checkpoint: 5461872]
+- [x] Task: Write failing tests for Backend Logic (Red Phase) 5461872
+  - [x] Write tests to verify that creating a sale correctly calculates `Total = Subtotal + Flete`.
+  - [x] Write tests to ensure the endpoint correctly processes `shipping_cost` from incoming form data/JSON.
+- [x] Task: Implement Backend Logic (Green Phase) 5461872
+  - [x] Update the backend service or logic layer to include `shipping_cost` in the total calculation.
+  - [x] Update the corresponding Flask routes/views to accept and process the `shipping_cost` parameter.
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 5461872
 
 ## Phase 3: Frontend UI Updates (HTMX)
 - [ ] Task: Write failing tests for UI/Frontend interactions (Red Phase)

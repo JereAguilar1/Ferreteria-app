@@ -18,12 +18,12 @@
   - [x] Update the corresponding Flask routes/views to accept and process the `shipping_cost` parameter.
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 5461872
 
-## Phase 3: Frontend UI Updates (HTMX)
-- [ ] Task: Write failing tests for UI/Frontend interactions (Red Phase)
-  - [ ] Write/update tests (if automated tests for templates exist) to verify the new fields are rendered correctly.
-- [ ] Task: Implement UI changes (Green Phase)
-  - [ ] Update the Boleta creation form (Jinja2 template) to include the `Costo de Flete` numeric input, opcional y con valor por defecto 0.
-  - [ ] Update the summary section in the template to display "Subtotal", "Flete", y "Total".
-  - [ ] Add HTMX bindings if necessary to recalculate and update the live "Total" when the "Flete" input changes.
-  - [ ] Update the sale detail/receipt view template to show the new breakdown.
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+## Phase 3: Frontend UI Updates (HTMX) [checkpoint: 387c16e]
+- [x] Task: Write failing tests for UI/Frontend interactions (Red Phase) 387c16e
+  - [x] Write/update tests (if automated tests for templates exist) to verify the new fields are rendered correctly.
+- [x] Task: Implement UI changes (Green Phase) 387c16e
+  - [x] Update the Boleta creation form (Jinja2 template) to include the `Costo de Flete` numeric input, opcional y con valor por defecto 0.
+  - [x] Update the summary section in the template to display "Subtotal", "Flete", y "Total".
+  - [x] Add HTMX bindings if necessary to recalculate and update the live "Total" when the "Flete" input changes.
+  - [x] Update the sale detail/receipt view template to show the new breakdown.
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 387c16e

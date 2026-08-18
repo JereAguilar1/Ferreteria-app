@@ -17,3 +17,6 @@
 ## Infrastructure
 - **Containerization**: Docker & Docker Compose
 - **Server**: Gunicorn 21.2.0
+
+## Deviations
+- **2026-08-18**: Migrations are managed by modifying `db/init/001_schema.sql` directly and executing `ALTER TABLE` in the running DB, instead of using Alembic.

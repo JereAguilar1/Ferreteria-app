@@ -534,8 +534,20 @@ def confirm():
             flash('Método de pago inválido.', 'danger')
             return redirect(url_for('sales.new_sale'))
         
+        # Extract shipping_cost
+        try:
+            shipping_cost_str = request.form.get('shipping_cost', '0')
+            if not shipping_cost_str.strip():
+                shipping_cost_str = '0'
+            shipping_cost = Decimal(shipping_cost_str)
+            if shipping_cost < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            flash('Costo de flete inválido.', 'danger')
+            return redirect(url_for('sales.new_sale'))
+
         # Call service to confirm sale
-        sale_id = confirm_sale(cart, db_session, payment_method)
+        sale_id = confirm_sale(cart, db_session, payment_method, shipping_cost=shipping_cost)
         
         # Clear cart
         session['cart'] = {'items': {}}

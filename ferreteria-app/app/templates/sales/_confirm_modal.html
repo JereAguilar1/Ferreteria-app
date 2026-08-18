@@ -54,10 +54,18 @@
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
+                                <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                                <td class="text-end"><strong>${{ cart_total|money_ar }}</strong></td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="text-end"><strong>Flete:</strong></td>
+                                <td class="text-end"><strong>${{ shipping_cost|money_ar }}</strong></td>
+                            </tr>
+                            <tr>
                                 <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
                                 <td class="text-end">
                                     <h5 class="mb-0 text-primary">
-                                        <strong>${{ cart_total|money_ar }}</strong>
+                                        <strong>${{ grand_total|money_ar }}</strong>
                                     </h5>
                                 </td>
                             </tr>
@@ -92,7 +100,7 @@
                     <strong><i class="bi bi-check2-square"></i> Resumen:</strong>
                     <ul class="mb-0 mt-2">
                         <li>Total de productos: <strong>{{ cart_items|length }}</strong></li>
-                        <li>Monto total: <strong>${{ cart_total|money_ar }}</strong></li>
+                        <li>Monto total: <strong>${{ grand_total|money_ar }}</strong></li>
                         <li>Se descontará stock automáticamente</li>
                         <li>Se registrará el ingreso en el libro contable</li>
                     </ul>
@@ -108,6 +116,7 @@
                 <!-- Final Confirmation Form -->
                 <form method="POST" action="{{ url_for('sales.confirm') }}" id="finalConfirmForm">
                     <input type="hidden" name="payment_method" value="{{ payment_method }}">
+                    <input type="hidden" name="shipping_cost" value="{{ shipping_cost }}">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-circle"></i> Confirmar Venta
                     </button>

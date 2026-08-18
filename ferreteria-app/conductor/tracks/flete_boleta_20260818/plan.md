@@ -1,12 +1,12 @@
 # Implementation Plan: Agregar Costo de Flete a Boleta
 
 ## Phase 1: Database & Model Update
-- [ ] Task: Write failing tests for Database/Model (Red Phase)
-  - [ ] Write unit tests asserting that the Sale/Boleta model correctly handles the `shipping_cost` attribute (default value 0).
-- [ ] Task: Implement Database changes (Green Phase)
-  - [ ] Add `shipping_cost` column (Numeric/Float) to the SQLAlchemy model.
-  - [ ] Generate Alembic migration for the new column.
-  - [ ] Apply Alembic migration to the local database.
+- [x] Task: Write failing tests for Database/Model (Red Phase) 2be2c10
+  - [x] Write unit tests asserting that the Sale/Boleta model correctly handles the `shipping_cost` attribute (default value 0).
+- [x] Task: Implement Database changes (Green Phase) 2be2c10
+  - [x] Add `shipping_cost` column (Numeric/Float) to the SQLAlchemy model.
+  - [x] Generate Alembic migration for the new column.
+  - [x] Apply Alembic migration to the local database.
 - [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
 
 ## Phase 2: Backend Logic (Total Calculation & Endpoints)

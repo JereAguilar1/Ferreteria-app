@@ -118,6 +118,7 @@ EXECUTE FUNCTION trg_product_init_stock();
 CREATE TABLE IF NOT EXISTS sale (
   id          BIGSERIAL PRIMARY KEY,
   datetime    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  shipping_cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
   total       NUMERIC(12,2) NOT NULL CHECK (total >= 0),
   status      sale_status NOT NULL DEFAULT 'CONFIRMED',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()

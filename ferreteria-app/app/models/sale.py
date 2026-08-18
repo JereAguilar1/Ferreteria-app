@@ -19,6 +19,7 @@ class Sale(Base):
     
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    shipping_cost = Column(Numeric(10, 2), nullable=False, default=0.00)
     total = Column(Numeric(10, 2), nullable=False)
     status = Column(Enum(SaleStatus, name='sale_status'), nullable=False, default=SaleStatus.CONFIRMED)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -2,6 +2,7 @@
 import os
 import sys
 from decimal import Decimal
+from datetime import date
 
 # Add app to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,8 +25,9 @@ def main():
             invoice = PurchaseInvoice(
                 supplier_id=1,
                 invoice_number='TEST-FLETE-1',
+                invoice_date=date.today(),
                 shipping_cost=Decimal('25.50'),
-                total=Decimal('125.50')
+                total_amount=Decimal('125.50')
             )
             print("✅ Model accepts shipping_cost attribute")
             

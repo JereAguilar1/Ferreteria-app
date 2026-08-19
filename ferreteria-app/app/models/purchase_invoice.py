@@ -22,6 +22,7 @@ class PurchaseInvoice(Base):
     invoice_number = Column(String, nullable=False)
     invoice_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=True)
+    shipping_cost = Column(Numeric(10, 2), nullable=False, default=0.00)
     total_amount = Column(Numeric(14, 2), nullable=False)
     status = Column(Enum(InvoiceStatus, name='invoice_status'), nullable=False, default=InvoiceStatus.PENDING)
     paid_at = Column(Date, nullable=True)

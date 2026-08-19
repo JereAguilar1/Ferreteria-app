@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS purchase_invoice (
   invoice_number VARCHAR(80) NOT NULL,
   invoice_date  DATE NOT NULL,
   due_date      DATE,
+  shipping_cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
   total_amount  NUMERIC(14,2) NOT NULL CHECK (total_amount >= 0), -- MEJORA 24
   status        invoice_status NOT NULL DEFAULT 'PENDING',
   paid_at       DATE,
@@ -377,8 +378,8 @@ DECLARE
   v_sum NUMERIC(12,2);
 BEGIN
   SELECT COALESCE(SUM(line_total), 0) INTO v_sum FROM purchase_invoice_line WHERE invoice_id = NEW.id;
-  IF NEW.total_amount <> v_sum THEN
-    RAISE EXCEPTION 'INVOICE % total_amount (%) does not match sum(lines) (%)', NEW.id, NEW.total_amount, v_sum;
+  IF NEW.total_amount <> (v_sum + NEW.shipping_cost) THEN
+    RAISE EXCEPTION 'INVOICE % total_amount (%) does not match sum(lines) + shipping_cost (%)', NEW.id, NEW.total_amount, (v_sum + NEW.shipping_cost);
   END IF;
   RETURN NEW;
 END;

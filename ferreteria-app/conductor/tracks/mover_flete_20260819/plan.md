@@ -3,10 +3,10 @@
 ## Phase 1: Revert Sales Freight Feature
 - [x] Task: Revert failing tests for Backend Logic (Red Phase) 0f64fac
   - [x] Modify `test_flete_boleta.py` (or completely remove it) to expect `Sale` without `shipping_cost`.
-- [ ] Task: Revert Database changes (Green Phase)
-  - [ ] Remove `shipping_cost` from `app/models/sale.py`.
-  - [ ] Revert `chk_sale_total_matches_lines` trigger logic and remove `shipping_cost` from `sale` table in `db/init/001_schema.sql`.
-  - [ ] Apply the schema reversion manually via SQL `ALTER TABLE` and `CREATE OR REPLACE FUNCTION` in the running local database.
+- [x] Task: Revert Database changes (Green Phase) 5a6956f
+  - [x] Remove `shipping_cost` from `app/models/sale.py`.
+  - [x] Revert `chk_sale_total_matches_lines` trigger logic and remove `shipping_cost` from `sale` table in `db/init/001_schema.sql`.
+  - [x] Apply the schema reversion manually via SQL `ALTER TABLE` and `CREATE OR REPLACE FUNCTION` in the running local database.
 - [ ] Task: Revert Backend Logic (Green Phase)
   - [ ] Revert changes in `app/services/sales_service.py` to remove `shipping_cost` from total calculation.
   - [ ] Revert changes in `app/blueprints/sales.py` to stop accepting `shipping_cost`.

@@ -15,8 +15,8 @@
 <div class="row mb-2">
     <div class="col-12">
         <div class="btn-group" role="group">
-            <a href="{{ url_for('invoices.list_invoices') }}" 
-               class="btn btn-outline-secondary {% if not selected_status and not due_soon and not overdue %}active{% endif %}">
+            <a href="{{ url_for('invoices.list_invoices', status='ALL') }}" 
+               class="btn btn-outline-secondary {% if selected_status == 'ALL' and not due_soon and not overdue %}active{% endif %}">
                 <i class="bi bi-list"></i> Todas
             </a>
             <a href="{{ url_for('invoices.list_invoices', status='PENDING') }}" 

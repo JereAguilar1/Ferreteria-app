@@ -1,8 +1,8 @@
 # Implementation Plan: Mover Costo de Flete de Ventas a Compras
 
 ## Phase 1: Revert Sales Freight Feature
-- [ ] Task: Revert failing tests for Backend Logic (Red Phase)
-  - [ ] Modify `test_flete_boleta.py` (or completely remove it) to expect `Sale` without `shipping_cost`.
+- [x] Task: Revert failing tests for Backend Logic (Red Phase) 0f64fac
+  - [x] Modify `test_flete_boleta.py` (or completely remove it) to expect `Sale` without `shipping_cost`.
 - [ ] Task: Revert Database changes (Green Phase)
   - [ ] Remove `shipping_cost` from `app/models/sale.py`.
   - [ ] Revert `chk_sale_total_matches_lines` trigger logic and remove `shipping_cost` from `sale` table in `db/init/001_schema.sql`.

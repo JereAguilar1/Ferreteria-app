@@ -14,14 +14,14 @@
   - [x] Remove `shipping_cost` inputs and fields from `app/templates/sales/_cart.html`, `app/templates/sales/_confirm_modal.html`, and `app/templates/sales/detail.html`.
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 392077a
 
-## Phase 2: Purchase Freight Database & Models
+## Phase 2: Purchase Freight Database & Models [checkpoint: 272a6c5]
 - [x] Task: Write failing tests for Database/Model (Red Phase) 64edcd3
   - [x] Create tests to verify that `PurchaseInvoice` correctly handles the `shipping_cost` attribute (default 0).
 - [x] Task: Implement Database changes (Green Phase) 45b15cc
   - [x] Add `shipping_cost` (Numeric) to `app/models/purchase_invoice.py`.
   - [x] Update `db/init/001_schema.sql` to add `shipping_cost` to the `purchase_invoice` table and update the `chk_invoice_total_matches_lines` trigger.
   - [x] Apply changes directly to the running PostgreSQL container.
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 272a6c5
 
 ## Phase 3: Purchase Freight Backend Logic
 - [ ] Task: Write failing tests for Backend Logic (Red Phase)

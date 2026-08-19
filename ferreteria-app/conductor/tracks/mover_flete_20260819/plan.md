@@ -24,8 +24,8 @@
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 272a6c5
 
 ## Phase 3: Purchase Freight Backend Logic
-- [ ] Task: Write failing tests for Backend Logic (Red Phase)
-  - [ ] Write unit tests to assert that `Total = Subtotal + Flete` when saving a new purchase invoice.
+- [x] Task: Write failing tests for Backend Logic (Red Phase) 2d8ebf9
+  - [x] Write unit tests to assert that `Total = Subtotal + Flete` when saving a new purchase invoice.
 - [ ] Task: Implement Backend Logic (Green Phase)
   - [ ] Update the purchase creation logic (e.g., in `purchase_service.py` or controllers) to include `shipping_cost`.
   - [ ] Update the route handling invoice submission to accept the parameter from the frontend.

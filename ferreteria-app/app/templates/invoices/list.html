@@ -77,7 +77,7 @@
                         hx-swap="innerHTML"
                         hx-include="[name='q'], [name='supplier_id']"
                         hx-push-url="true">
-                    <option value="">Todos los estados</option>
+                    <option value="ALL" {% if selected_status == 'ALL' %}selected{% endif %}>Todas</option>
                     <option value="PENDING" {% if selected_status == 'PENDING' %}selected{% endif %}>Pendiente</option>
                     <option value="PAID" {% if selected_status == 'PAID' %}selected{% endif %}>Pagada</option>
                 </select>
@@ -86,7 +86,7 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-funnel"></i> Filtrar
                 </button>
-                {% if selected_supplier or selected_status or search_query %}
+                {% if selected_supplier or selected_status != 'PENDING' or search_query %}
                 <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-x-circle"></i> Limpiar
                 </a>

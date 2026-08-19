@@ -66,7 +66,7 @@ def list_invoices():
     try:
         # Optional filters
         supplier_id = request.args.get('supplier_id', type=int)
-        status = request.args.get('status', '').upper()
+        status = request.args.get('status', 'PENDING').upper()
         search_query = request.args.get('q', '').strip()
         due_soon = request.args.get('due_soon', type=int)  # MEJORA 21
         overdue = request.args.get('overdue', type=int)  # MEJORA 21

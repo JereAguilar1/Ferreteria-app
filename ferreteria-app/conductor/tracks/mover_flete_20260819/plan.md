@@ -1,6 +1,6 @@
 # Implementation Plan: Mover Costo de Flete de Ventas a Compras
 
-## Phase 1: Revert Sales Freight Feature
+## Phase 1: Revert Sales Freight Feature [checkpoint: 392077a]
 - [x] Task: Revert failing tests for Backend Logic (Red Phase) 0f64fac
   - [x] Modify `test_flete_boleta.py` (or completely remove it) to expect `Sale` without `shipping_cost`.
 - [x] Task: Revert Database changes (Green Phase) 5a6956f
@@ -12,7 +12,7 @@
   - [x] Revert changes in `app/blueprints/sales.py` to stop accepting `shipping_cost`.
 - [x] Task: Revert Frontend UI Updates (Green Phase) 0ce8810
   - [x] Remove `shipping_cost` inputs and fields from `app/templates/sales/_cart.html`, `app/templates/sales/_confirm_modal.html`, and `app/templates/sales/detail.html`.
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 392077a
 
 ## Phase 2: Purchase Freight Database & Models
 - [ ] Task: Write failing tests for Database/Model (Red Phase)

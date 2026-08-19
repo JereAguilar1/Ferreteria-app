@@ -23,13 +23,13 @@
   - [x] Apply changes directly to the running PostgreSQL container.
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 272a6c5
 
-## Phase 3: Purchase Freight Backend Logic
+## Phase 3: Purchase Freight Backend Logic [checkpoint: 4588c4f]
 - [x] Task: Write failing tests for Backend Logic (Red Phase) 2d8ebf9
   - [x] Write unit tests to assert that `Total = Subtotal + Flete` when saving a new purchase invoice.
 - [x] Task: Implement Backend Logic (Green Phase) ac47684
   - [x] Update the purchase creation logic (e.g., in `purchase_service.py` or controllers) to include `shipping_cost`.
   - [x] Update the route handling invoice submission to accept the parameter from the frontend.
-- [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
+- [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 4588c4f
 
 ## Phase 4: Purchase Freight Frontend UI
 - [ ] Task: Write failing tests for UI/Frontend interactions (Red Phase)

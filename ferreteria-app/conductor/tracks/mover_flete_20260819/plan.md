@@ -10,8 +10,8 @@
 - [x] Task: Revert Backend Logic (Green Phase) 7ce21ee
   - [x] Revert changes in `app/services/sales_service.py` to remove `shipping_cost` from total calculation.
   - [x] Revert changes in `app/blueprints/sales.py` to stop accepting `shipping_cost`.
-- [ ] Task: Revert Frontend UI Updates (Green Phase)
-  - [ ] Remove `shipping_cost` inputs and fields from `app/templates/sales/_cart.html`, `app/templates/sales/_confirm_modal.html`, and `app/templates/sales/detail.html`.
+- [x] Task: Revert Frontend UI Updates (Green Phase) 0ce8810
+  - [x] Remove `shipping_cost` inputs and fields from `app/templates/sales/_cart.html`, `app/templates/sales/_confirm_modal.html`, and `app/templates/sales/detail.html`.
 - [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
 
 ## Phase 2: Purchase Freight Database & Models

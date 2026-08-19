@@ -375,6 +375,20 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
         
         total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
         
+        # Step 4.5: Extract shipping_cost
+        shipping_cost = Decimal('0.00')
+        raw_shipping_cost = payload.get('shipping_cost', 0)
+        if raw_shipping_cost:
+            try:
+                shipping_cost = Decimal(str(raw_shipping_cost))
+                if shipping_cost < 0:
+                    raise ValueError('El costo de flete no puede ser negativo')
+            except (TypeError, ValueError, decimal.InvalidOperation):
+                raise ValueError('Costo de flete inválido')
+        
+        shipping_cost = shipping_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        total_amount = (total_amount + shipping_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        
         # Step 5: Calculate deltas per product
         deltas = {}  # {product_id: delta_qty}
         
@@ -453,8 +467,9 @@ def update_invoice_with_lines(invoice_id: int, payload: dict, session) -> None:
         if notes is not None:
             invoice.notes = notes.strip() if notes.strip() else None
         
-        # Update total_amount
+        # Update total_amount and shipping_cost
         invoice.total_amount = total_amount
+        invoice.shipping_cost = shipping_cost
         
         # Step 8: Replace lines (delete old + insert new)
         session.query(PurchaseInvoiceLine).filter_by(invoice_id=invoice_id).delete()

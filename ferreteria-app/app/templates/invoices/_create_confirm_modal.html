@@ -83,8 +83,22 @@
                                     {% endfor %}
                                 </tbody>
                                 <tfoot class="table-light">
+                                    {% if shipping_cost and shipping_cost > 0 %}
                                     <tr>
-                                        <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
+                                        <td colspan="4" class="text-end"><strong>Subtotal:</strong></td>
+                                        <td class="text-end">
+                                            <strong>${{ (total_amount - shipping_cost)|money_ar_2 }}</strong>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="4" class="text-end"><strong>Flete:</strong></td>
+                                        <td class="text-end">
+                                            <strong>${{ shipping_cost|money_ar_2 }}</strong>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <td colspan="4" class="text-end"><strong>TOTAL:</strong></td>
                                         <td class="text-end">
                                             <h5 class="mb-0 text-primary">${{ total_amount|money_ar_2 }}</h5>
                                         </td>

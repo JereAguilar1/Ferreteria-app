@@ -1022,6 +1022,14 @@ def edit_invoice_preview(invoice_id):
                         })
         
         new_total = new_total.quantize(Decimal('0.01'))
+        
+        try:
+            shipping_cost = Decimal(request.form.get('shipping_cost', '0'))
+        except (decimal.InvalidOperation, ValueError):
+            shipping_cost = Decimal('0.00')
+            
+        shipping_cost = shipping_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        new_total = (new_total + shipping_cost).quantize(Decimal('0.01'))
 
         # Check if there are any changes
         has_changes = (
@@ -1032,6 +1040,7 @@ def edit_invoice_preview(invoice_id):
             invoice_number != invoice.invoice_number or
             invoice_date != invoice.invoice_date or
             due_date != invoice.due_date or
+            shipping_cost != invoice.shipping_cost or
             old_total != new_total
         )
         
@@ -1046,7 +1055,8 @@ def edit_invoice_preview(invoice_id):
                              supplier=supplier,
                              invoice_number=invoice_number,
                              invoice_date=invoice_date,
-                             due_date=due_date)
+                             due_date=due_date,
+                             shipping_cost=shipping_cost)
         
     except Exception as e:
         current_app.logger.error(f"Error generating edit preview for invoice {invoice_id}: {e}")
@@ -1152,6 +1162,7 @@ def save_invoice_edit(invoice_id):
             'invoice_number': invoice_number,
             'invoice_date': invoice_date,
             'due_date': due_date,
+            'shipping_cost': Decimal(request.form.get('shipping_cost', '0')),
             'lines': lines_data
         }
         

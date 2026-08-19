@@ -32,10 +32,10 @@
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 4588c4f
 
 ## Phase 4: Purchase Freight Frontend UI
-- [ ] Task: Write failing tests for UI/Frontend interactions (Red Phase)
-  - [ ] Write or specify manual test scripts for rendering the purchase UI correctly with the new field.
-- [ ] Task: Implement UI changes (Green Phase)
-  - [ ] Update the purchase invoice creation form (`app/templates/purchases/...`) to include an optional `Costo de Flete` input.
-  - [ ] Update the summary/totals sections to show "Subtotal", "Flete" y "Total".
-  - [ ] Update the purchase detail view to show the breakdown of costs.
+- [x] Task: Write failing tests for UI/Frontend interactions (Red Phase) d50d462
+  - [x] Write or specify manual test scripts for rendering the purchase UI correctly with the new field.
+- [x] Task: Implement UI changes (Green Phase) 8fdb9a7
+  - [x] Update the purchase invoice creation form (`app/templates/purchases/...` or `invoices/new.html`) to include an optional `Costo de Flete` input.
+  - [x] Update the summary/totals sections to show "Subtotal", "Flete" y "Total".
+  - [x] Update the purchase detail view to show the breakdown of costs.
 - [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)

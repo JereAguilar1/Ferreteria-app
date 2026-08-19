@@ -15,8 +15,8 @@
 - [x] Task: Phase Verification & Checkpoint (Refer to workflow.md) 392077a
 
 ## Phase 2: Purchase Freight Database & Models
-- [ ] Task: Write failing tests for Database/Model (Red Phase)
-  - [ ] Create tests to verify that `PurchaseInvoice` correctly handles the `shipping_cost` attribute (default 0).
+- [x] Task: Write failing tests for Database/Model (Red Phase) 64edcd3
+  - [x] Create tests to verify that `PurchaseInvoice` correctly handles the `shipping_cost` attribute (default 0).
 - [ ] Task: Implement Database changes (Green Phase)
   - [ ] Add `shipping_cost` (Numeric) to `app/models/purchase_invoice.py`.
   - [ ] Update `db/init/001_schema.sql` to add `shipping_cost` to the `purchase_invoice` table and update the `chk_invoice_total_matches_lines` trigger.

@@ -27,14 +27,15 @@ def add_months(sourcedate, months):
 
 
 def get_invoice_draft():
-    """Get invoice draft from session."""
+    """Get invoice draft from session or initialize it."""
     if 'invoice_draft' not in session:
         session['invoice_draft'] = {
             'supplier_id': None,
             'invoice_number': '',
             'invoice_date': '',
             'due_date': '',
-            'lines': []  # List of {product_id, qty, unit_cost, vat_rate}
+            'shipping_cost': '0',
+            'lines': []
         }
     return session['invoice_draft']
 
@@ -422,6 +423,7 @@ def update_draft_header():
         draft['invoice_number'] = request.form.get('invoice_number', '').strip()
         draft['invoice_date'] = request.form.get('invoice_date', '').strip()
         draft['due_date'] = request.form.get('due_date', '').strip()
+        draft['shipping_cost'] = request.form.get('shipping_cost', '0').strip()
         
         save_invoice_draft(draft)
         
@@ -605,12 +607,21 @@ def confirm_create_preview():
             return '<div class="alert alert-danger">Fecha inválida en el draft.</div>'
         
         total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        
+        try:
+            shipping_cost = Decimal(draft.get('shipping_cost', '0'))
+        except (decimal.InvalidOperation, ValueError):
+            shipping_cost = Decimal('0.00')
+            
+        shipping_cost = shipping_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        total_amount = (total_amount + shipping_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
 
         return render_template('invoices/_create_confirm_modal.html',
                              supplier=supplier,
                              invoice_number=draft['invoice_number'],
                              invoice_date=invoice_date,
                              due_date=due_date,
+                             shipping_cost=shipping_cost,
                              lines=lines_data,
                              total_amount=total_amount)
         
@@ -675,6 +686,7 @@ def create_invoice():
             'invoice_number': draft['invoice_number'],
             'invoice_date': invoice_date,
             'due_date': due_date,
+            'shipping_cost': Decimal(draft.get('shipping_cost', '0')),
             'lines': lines_payload
         }
         

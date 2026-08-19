@@ -136,7 +136,19 @@ def create_invoice_with_lines(payload: dict, session) -> int:
             
             total_amount += line_total
         
-        total_amount = total_amount.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        # Step 2.5: Extract shipping_cost
+        shipping_cost = Decimal('0.00')
+        raw_shipping_cost = payload.get('shipping_cost', 0)
+        if raw_shipping_cost:
+            try:
+                shipping_cost = Decimal(str(raw_shipping_cost))
+                if shipping_cost < 0:
+                    raise ValueError('El costo de flete no puede ser negativo')
+            except (TypeError, ValueError, decimal.InvalidOperation):
+                raise ValueError('Costo de flete inválido')
+        
+        shipping_cost = shipping_cost.quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
+        total_amount = (total_amount + shipping_cost).quantize(Decimal('0.01'), rounding=decimal.ROUND_HALF_UP)
         
         # Step 3: Check for duplicate invoice_number for same supplier
         existing = (session.query(PurchaseInvoice)
@@ -154,6 +166,7 @@ def create_invoice_with_lines(payload: dict, session) -> int:
             invoice_number=invoice_number,
             invoice_date=invoice_date,
             due_date=due_date,
+            shipping_cost=shipping_cost,
             total_amount=total_amount,
             status=InvoiceStatus.PENDING,
             paid_at=None

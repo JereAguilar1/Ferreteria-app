@@ -17,10 +17,10 @@
 ## Phase 2: Purchase Freight Database & Models
 - [x] Task: Write failing tests for Database/Model (Red Phase) 64edcd3
   - [x] Create tests to verify that `PurchaseInvoice` correctly handles the `shipping_cost` attribute (default 0).
-- [ ] Task: Implement Database changes (Green Phase)
-  - [ ] Add `shipping_cost` (Numeric) to `app/models/purchase_invoice.py`.
-  - [ ] Update `db/init/001_schema.sql` to add `shipping_cost` to the `purchase_invoice` table and update the `chk_invoice_total_matches_lines` trigger.
-  - [ ] Apply changes directly to the running PostgreSQL container.
+- [x] Task: Implement Database changes (Green Phase) 45b15cc
+  - [x] Add `shipping_cost` (Numeric) to `app/models/purchase_invoice.py`.
+  - [x] Update `db/init/001_schema.sql` to add `shipping_cost` to the `purchase_invoice` table and update the `chk_invoice_total_matches_lines` trigger.
+  - [x] Apply changes directly to the running PostgreSQL container.
 - [ ] Task: Phase Verification & Checkpoint (Refer to workflow.md)
 
 ## Phase 3: Purchase Freight Backend Logic

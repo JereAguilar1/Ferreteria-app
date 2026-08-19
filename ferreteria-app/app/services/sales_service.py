@@ -10,7 +10,7 @@ from app.models import (
 )
 
 
-def confirm_sale(cart: dict, session, payment_method: str = 'CASH', shipping_cost: Decimal = Decimal('0.00')) -> int:
+def confirm_sale(cart: dict, session, payment_method: str = 'CASH') -> int:
     """
     Confirm sale with full transactional processing.
     
@@ -27,7 +27,6 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH', shipping_cos
         cart: Cart dictionary with items
         session: SQLAlchemy session
         payment_method: 'CASH' or 'TRANSFER' (MEJORA 12)
-        shipping_cost: Shipping cost to add to total
     
     Returns:
         sale_id: ID of created sale
@@ -149,7 +148,7 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH', shipping_cos
             
             sale_total += line_total
         
-        sale_total = (sale_total + shipping_cost).quantize(Decimal('0.01'))
+        sale_total = sale_total.quantize(Decimal('0.01'))
         
         # Step 4: Create Sale
         from app.utils.formatters import get_now_ar, ar_to_utc
@@ -157,7 +156,6 @@ def confirm_sale(cart: dict, session, payment_method: str = 'CASH', shipping_cos
         
         sale = Sale(
             datetime=now_utc,
-            shipping_cost=shipping_cost,
             total=sale_total,
             status=SaleStatus.CONFIRMED
         )
